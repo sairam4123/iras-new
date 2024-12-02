@@ -3,3 +3,9 @@ __pycache__/
 announcements/
 
 .etrain-cache/
+
+text_to_speech/
+
+recordings/
+
+trains.json

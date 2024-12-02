@@ -1,4 +1,3 @@
-# https://stackoverflow.com/a/44552191/11697614
 from dataclasses import dataclass
 import datetime
 from pathlib import Path
@@ -7,6 +6,7 @@ import urllib
 
 
 
+# https://stackoverflow.com/a/44552191/11697614
 def build_url(base_url, path, query_dict={}):
     # Returns a list in the structure of urlparse.ParseResult
     url_parts = list(urllib.parse.urlparse(base_url))
@@ -39,11 +39,11 @@ class ETrainArrivalDepartureConfig:
     exclude_local: bool = True
     exclude_fast_emu: bool = True
     exclude_parcel_services: bool = True
-    limit: int = 7
+    limit: int = 15
 
 @dataclass
 class ETrainAllTrainsConfig:
-    limit: int = 7
+    limit: int = 15
     weekday: int = datetime.datetime.now().weekday()
 
 def decode_hash(encoded_hash, key):
