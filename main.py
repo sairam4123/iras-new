@@ -8,7 +8,7 @@ import re
 import time
 import espeak_ng
 
-from collections import deque, defaultdict
+from collections import defaultdict
 
 from discord.ext import commands, tasks
 
@@ -25,10 +25,9 @@ from player import main as player_main
 from etrainlib import CACHE_FOLDER
 
 STATION_FILE = Path("stations.json")
-TRAIN_FILE = Path("trains.json")
 
 TTS_FILE_FORMAT = "{0.id}-{1}.wav"
-TTS_FOLDER = Path.cwd() / "text_to_speech"
+TTS_FOLDER = Path.cwd() / ".tts"
 
 
 songs = defaultdict(list)
@@ -117,6 +116,7 @@ class TrainBot(commands.Bot):
         self.play_announcement.start()
         print("I'm ready!")
         print("Started tasks!")
+        TTS_FOLDER.mkdir(exist_ok=True)
     
     async def setup_hook(self):
         self.play_announcement.start()

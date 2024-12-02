@@ -4,8 +4,8 @@ announcements/
 
 .etrain-cache/
 
-text_to_speech/
-
-recordings/
+.tts/
 
 trains.json
+
+*.tkn
