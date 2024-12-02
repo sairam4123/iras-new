@@ -25,6 +25,7 @@ ANNOUNCEMENTS_PATH.mkdir(exist_ok=True)
 
 abbvs = {
     " VB EXP ": " VANDE BHARAT EXPRESS ",
+    " SEMI FAST ": " SEMI FAST local train ",
     " EXP ": " Express ",
     " EX ": " Express ",
     " SF ": " Superfast ",
@@ -48,6 +49,18 @@ Your kind attention please! Train number: {train[no]} {train[name]} coming from 
 """
 }
 
+arrival_shortly_middle = {
+    "ta": """
+Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
+""",
+    "en": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
+""",
+    "hi": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} will come shortly on platform number {train[pf]}.
+"""
+}
+
 arrival_on = {
     "en": """
 Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} is arriving on platform number {train[pf]}.
@@ -60,16 +73,39 @@ Passengers attention please, Train number: {train[no]} {train[name]} coming from
 """
 }
 
+arrival_on_middle = {
+    "en": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is arriving on platform number {train[pf]}.
+""",
+    "hi": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is coming on platform number {train[pf]}.
+""",
+    "ta": """
+Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is arriving on platform number {train[pf]}.
+"""
+}
 
 arrival = {
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} will arrive on platform number {train[pf]}.
+Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
 """,
     "hi": """
-Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} will come on platform number {train[pf]}.
+Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]}, there is a possiblity to come at {train[arr_time]} on platform number {train[pf]}.
 """,
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} coming from {train[src]} will arrive on platform number {train[pf]}.
+Passengers attention please, Train number: {train[no]} {train[name]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+"""
+}
+
+arrival_middle = {
+    "en": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+""",
+    "hi": """
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} there is a possiblity to come at {train[arr_time]} on platform number {train[pf]}.
+""",
+    "ta": """
+Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
 """
 }
 
@@ -125,89 +161,99 @@ rescheduled = """
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} scheduled to depart at {train[tt_dept]} has been rescheduled. The new departure time is {train[dept_time]}. We deeply regret the inconvinence caused
 """
 
-
-def choose_msg(train, cur_time: datetime.datetime) -> str:
-    arr = train["exp_arr"].split(", ")[0]
-    source = arr.lower().startswith("source")
+def parse_arrdep_time(train, cur_time) -> tuple[datetime.datetime | None, datetime.datetime | None]:
+    arr_time = str(train["exp_arr"])
+    source = arr_time.lower().startswith("source")
     if not source:
-        day = int(train["exp_arr"].split(", ")[1].split(" ")[0])
-        arr = datetime.datetime.strptime(arr, "%H:%M").replace(
-            cur_time.year, cur_time.month, day, second=cur_time.second
-        )
-
-    dept = train["exp_dept"].split(", ")[0]
-    dest = dept.lower().startswith("dest")
-    print(train["exp_arr"])
-    print(train["exp_dept"])
-    if not dest:
-        day = int(train["exp_dept"].split(", ")[1].split(" ")[0])
-        dept = datetime.datetime.strptime(dept, "%H:%M").replace(
-            cur_time.year, cur_time.month, day, second=cur_time.second
-        )
-    msg = ""
-    if source and not dest:  # Train is originating from here and not terminating here
-        if dept > cur_time and (dept - cur_time).total_seconds() < 120:
-            msg = departure_ready
-
-        elif dept > cur_time and (dept - cur_time).total_seconds() < 60 * 60:
-            msg = departure
-        print(
-            arr,
-            dept,
-            cur_time,
-            (dept - cur_time).total_seconds(),
-            "Train originates here.",
-        )
-    elif not source and dest:  # Coming from somewhere and not originating here.
-        if arr > cur_time and (arr - cur_time).total_seconds() < 60:
-            msg = arrival_on
-        elif arr > cur_time and (arr - cur_time).total_seconds() < 20 * 60:
-            msg = arrival_shortly
-        print(
-            arr,
-            dept,
-            cur_time,
-            (arr - cur_time).total_seconds(),
-            "Train terminates here.",
+        arr_time, arr_day = str(train["exp_arr"]).split(", ")
+        arr_day = int(arr_day.split(" ")[0])
+        arr = datetime.datetime.strptime(arr_time, "%H:%M").replace(
+            cur_time.year, cur_time.month, arr_day, second=cur_time.second
         )
     else:
-        if arr > cur_time and (arr - cur_time).total_seconds() < 2 * 60:
-            msg = arrival_on
+        arr = None
+
+    dept_time = str(train["exp_dept"])
+    dest = dept_time.lower().startswith("dest")
+
+    if not dest:
+        dept_time, dept_day = str(train["exp_dept"]).split(", ")
+        dept_day = int(dept_day.split(" ")[0])
+        dept = datetime.datetime.strptime(dept_time, "%H:%M").replace(
+            cur_time.year, cur_time.month, dept_day, second=cur_time.second
+        )
+    else:
+        dept = None
+    return arr, dept
+
+def choose_msg(train, cur_time: datetime.datetime) -> str:
+    arr_time, dep_time = parse_arrdep_time(train, cur_time)
+    is_originating, is_terminating = arr_time is None, dep_time is None
+    msg_priority = "", 100
+    if is_originating and not is_terminating:  # Train is originating from here and going somewhere.
+        if dep_time > cur_time and (dep_time - cur_time).total_seconds() < 2 * 60:
+            msg_priority = departure_ready, 2
+        elif dep_time > cur_time and (dep_time - cur_time).total_seconds() < 60 * 60:
+            msg_priority = departure, 6
+        print(
+            arr_time,
+            dep_time,
+            cur_time,
+            (dep_time - cur_time).total_seconds(),
+            "Train originates here.",
+        )
+    elif not is_originating and is_terminating:  # Coming from somewhere and not originating here.
+        if arr_time > cur_time and (arr_time - cur_time).total_seconds() < 2 * 60:
+            msg_priority = arrival_on, 1
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 10 * 60:
+            msg_priority = arrival_shortly, 4
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 20 * 60:
+            msg_priority = arrival, 5
+        print(
+            arr_time,
+            dep_time,
+            cur_time,
+            (arr_time - cur_time).total_seconds(),
+            "Train terminates here.",
+        )
+    else: # Train is coming from somewhere going somewhere, dunno where :)
+        if arr_time > cur_time and (arr_time - cur_time).total_seconds() < 2 * 60:
+            msg_priority = arrival_on_middle, 1
             print("Generating arriving on message.")
-        elif arr > cur_time and (arr - cur_time).total_seconds() < 10 * 60:
-            msg = arrival_shortly
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 10 * 60:
+            msg_priority = arrival_shortly_middle, 4
             print("Generating arriving shortly message.")
-        elif arr > cur_time and (arr - cur_time).total_seconds() < 20 * 60:
-            msg = arrival
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 20 * 60:
+            msg_priority = arrival_middle, 5
             print("Generating arrival message")
 
-        if dept > cur_time and (dept - cur_time).total_seconds() < 3 * 60:
-            msg = departure_ready
+        if dep_time > cur_time and (dep_time - cur_time).total_seconds() < 3 * 60:
+            msg_priority = departure_ready, 2
             print("Generating departing ready")
 
         elif (
-            dept > cur_time
-            and cur_time > arr
-            and (dept - cur_time).total_seconds() < 60 * 60
+            dep_time > cur_time
+            and cur_time > arr_time
+            and (dep_time - cur_time).total_seconds() < 60 * 60
         ):
-            msg = departure
+            msg_priority = departure, 6
             print("Generating scheduled for departure message.")
 
         if (
-            arr < cur_time
-            and dept > cur_time
-            and (dept - cur_time).total_seconds() > 3 * 60
+            arr_time < cur_time
+            and dep_time > cur_time
+            and (dep_time - cur_time).total_seconds() > 2 * 60
         ):
-            msg = on_platform
+            msg_priority = on_platform, 3
 
         print(
-            arr,
-            dept,
+            arr_time,
+            dep_time,
             cur_time,
-            (arr - cur_time).total_seconds(),
-            (dept - cur_time).total_seconds(),
+            (arr_time - cur_time).total_seconds(),
+            (dep_time - cur_time).total_seconds(),
         )
-    return msg
+    return msg_priority
 
 
 def replace_stn_names(_str: str) -> str:
@@ -329,14 +375,8 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
                 print(train["tt_pf"])
                 continue
             train_correct_number = " ; ".join(list(train["train_no"])) + " ;"
-            msg = choose_msg(train, cur_time=time)
-            dept = train["exp_dept"].split(", ")[0]
-            dest = dept.lower().startswith("dest")
-            if not dest:
-                day = int(train["exp_dept"].split(", ")[1].split(" ")[0])
-                dept = datetime.datetime.strptime(dept, "%H:%M").replace(
-                    time.year, time.month, day, second=time.second
-                )
+            msg, priority = choose_msg(train, cur_time=time)
+            arr_time, dep_time = parse_arrdep_time(train, time)
             if not msg:
                 continue
             train_info = (
@@ -347,13 +387,15 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
                         "src": replace_abbvs(replace_stn_names(train["src"] + " ")).strip(),
                         "dest": replace_abbvs(replace_stn_names(train["dest"] + " ")).strip(),
                         "pf": train["tt_pf"],
-                        "dept_time": train["exp_dept"].split(" ")[0],
+                        "arr_time": (arr_time or time).strftime("%H:%M"),
+                        "dept_time": (dep_time or time).strftime("%H:%M"),
                     }
                 }
             )
             print("Getting train schedule...")
             schedule: list = await etrain.get_train_schedule(train["train_no"], train["train_name"].replace(" ", "-"))
             if schedule:
+                print("Updating station map...")
                 station_map = json.loads(STATION_FILE.read_text())
                 station_map.update({sta["code"]: {"code": sta["code"], "name": sta["name"]} for sta in schedule})
                 STATION_FILE.write_text(json.dumps(station_map))
@@ -371,7 +413,7 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
             )
             (intro + silent + (announcement + 3)).export(str(ann_file), format="wav")
             announcements.append(ann_file)
-            yield [ann_file, dept]
+            yield [ann_file, dep_time, priority]
         
 
 
