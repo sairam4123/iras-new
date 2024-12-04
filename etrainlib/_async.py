@@ -9,7 +9,7 @@ from .parser import ETrainParser
 import json
 
 class ETrainAPIAsync:
-    def __init__(self, phpcookie=None, captcha_resolver: Callable[[str, list[str]], str] = None):
+    def __init__(self, phpcookie=None, captcha_resolver: Callable[[str, list[str], str], str] = None):
         self.req_id = 0
         self.req_count = {}
         if AUTH_CACHE.exists():
@@ -65,15 +65,17 @@ class ETrainAPIAsync:
 
         captcha_soup = bs4.BeautifulSoup(code, "html.parser")
         image = captcha_soup.find("img", attrs={"class": "captchaimage"})
+        error = captcha_soup.find("span", attrs={"id": "captchaformerrormsg"}).get_text()
 
+        match = re.search(r"sD\s*=\s*'([^']+)'", code)
+        if not match:
+            (CACHE_FOLDER / "invalid-captcha.html").write_text(code)
+            raise ETrainAPIError("invalid captchadata found", match)
+        
         async with self.session.get(BASE_URL + image.attrs["src"]) as res:
             res: Response
             if res.status != 200:
                 raise ETrainAPIError("failed to fetch captcha image")
-            
-            match = re.search(r"sD\s*=\s*'([^']+)'", code)
-            if not match:
-                raise ETrainAPIError("invalid captcha")
 
             encoded_hash = match.group(1)
             cache_file = f"{encoded_hash.replace('.', '_')}.png"
@@ -82,7 +84,7 @@ class ETrainAPIAsync:
         captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
         keys = [captcha.get_text() for captcha in captcha_btns]
 
-        key = await self.captcha_handler(encoded_hash, keys)
+        key = await self.captcha_handler(encoded_hash, keys, error)
         index = keys.index(key)
 
         decoded_hash = decode_hash(encoded_hash, index)

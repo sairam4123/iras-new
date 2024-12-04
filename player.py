@@ -26,6 +26,7 @@ ANNOUNCEMENTS_PATH.mkdir(exist_ok=True)
 abbvs = {
     " VB EXP ": " VANDE BHARAT EXPRESS ",
     " SEMI FAST ": " SEMI FAST local train ",
+    " FAST ": " FAST local train ",
     " EXP ": " Express ",
     " EX ": " Express ",
     " SF ": " Superfast ",
@@ -413,7 +414,7 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
             )
             (intro + silent + (announcement + 3)).export(str(ann_file), format="wav")
             announcements.append(ann_file)
-            yield [ann_file, dep_time, priority]
+            yield [ann_file, dep_time or arr_time, priority]
         
 
 

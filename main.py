@@ -54,11 +54,12 @@ class CaptchaButton(discord.ui.Button):
         self.view.stop()
 
 class CaptchaView(discord.ui.View):
-    def __init__(self, sd: str, keys: list[str]):
+    def __init__(self, sd: str, keys: list[str], author_id: str):
         super().__init__()
         self.sd = sd
         self.keys = keys
         self.selected = None
+        self.author_id = author_id  
         self.btns = [
             CaptchaButton(key, key)
             for key in keys
@@ -66,8 +67,8 @@ class CaptchaView(discord.ui.View):
         for btn in self.btns:
             self.add_item(btn)
         
-    # async def interaction_check(self, interaction: discord.Interaction) -> bool:
-    #     return interaction.user.id
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.author_id
     
     
 
@@ -85,9 +86,9 @@ class TrainBot(commands.Bot):
             author_id = announcements[guild_id]["author"]
             channel = await self.fetch_channel(channel_id)
 
-            async def _captcha_resolver(sd: str, keys: list[str]) -> str:
-                view = CaptchaView(sd, keys)
-                await channel.send(f"Look at the below image and select the key", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
+            async def _captcha_resolver(sd: str, keys: list[str], error: str) -> str:
+                view = CaptchaView(sd, keys, author_id)
+                await channel.send(f"Look at the below image and select the key: {error}", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
 
                 await view.wait()
                 key = view.selected
@@ -231,9 +232,9 @@ async def start_announcement(
 
     announcements[ctx.voice_client.guild.id] = {"station": station, "author": ctx.author.id, "channel": ctx.channel_id}
 
-    async def _captcha_handler(sd: str, keys: list[str]) -> str:
-        view = CaptchaView(sd, keys)
-        await ctx.send(f"Look at the below image and select the key", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
+    async def _captcha_handler(sd: str, keys: list[str], error: str) -> str:
+        view = CaptchaView(sd, keys, ctx.author.id)
+        await ctx.send(f"Look at the below image and select the key: {error}", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
 
         await view.wait()
         key = view.selected
