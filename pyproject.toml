@@ -21,6 +21,8 @@ SpeechRecognition = "^3.10.0"
 py-trans = "^0.6.1"
 aiofiles = "^24.1.0"
 beautifulsoup4 = "^4.12.3"
+aioconsole = "^0.8.1"
+climage = "^0.2.2"
 
 [tool.poetry.dev-dependencies]
 

@@ -261,6 +261,7 @@ async def stop_announcement(ctx: discord.ApplicationContext):
     if ctx.voice_client:
         del announcements[ctx.voice_client.guild.id]
         await ctx.respond("Stopped announcement system!")
+        await ctx.voice_client.stop()
         tts("Stopping announcement system!", ctx.author, ctx.voice_client)
         await ctx.voice_client.disconnect()
     else:

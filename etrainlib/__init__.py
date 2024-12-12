@@ -2,9 +2,9 @@ from ._sync import ETrainAPI, ETrainAPIError, ETrainArrivalDepartureConfig, CACH
 import asyncio
 
 
-def default_captcha_handler(sd: str, keys: list[str]) -> str:
+def default_captcha_handler(sd: str, keys: list[str], error: str) -> str:
     key = input(
-        f"Look for the image in .etrain-cache folder with name: {sd.replace('.', '_')}: \nPossible keys are: {keys}\n> "
+        f"{error} Look for the image in .etrain-cache folder with name: {sd.replace('.', '_')}: \nPossible keys are: {keys}\n> "
     )
     return key.strip()
 

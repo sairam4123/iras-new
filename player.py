@@ -27,6 +27,7 @@ abbvs = {
     " VB EXP ": " VANDE BHARAT EXPRESS ",
     " SEMI FAST ": " SEMI FAST local train ",
     " FAST ": " FAST local train ",
+    " SMPRK KRNTI ": "SAMPRAK KRANTI",
     " EXP ": " Express ",
     " EX ": " Express ",
     " SF ": " Superfast ",
@@ -340,7 +341,7 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
             f.seek(0, 2)
         f.seek(0)
         segment: pydub.AudioSegment = pydub.AudioSegment.from_file(f)
-        return speedup(segment, playback_speed=1.15)
+        return speedup(segment, playback_speed=1.25)
 
 
 def format_train_name(train_name: str):
