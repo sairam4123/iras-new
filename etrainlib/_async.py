@@ -4,12 +4,12 @@ from typing import Callable
 import aiohttp
 from aiohttp import ClientResponse as Response
 import bs4
-from .constants import API_VERSION, BASE_API, BASE_URL, CACHE_FOLDER, COMMON_HEADERS, AUTH_CACHE, ETrainAPIError, ETrainAllTrainsConfig, ETrainArrivalDepartureConfig, build_formdata, build_url, decode_hash
+from .constants import API_VERSION, BASE_API, BASE_URL, CACHE_FOLDER, CAPTCHA_FOLDER, COMMON_HEADERS, AUTH_CACHE, ETrainAPIError, ETrainAllTrainsConfig, ETrainArrivalDepartureConfig, build_formdata, build_url, decode_hash
 from .parser import ETrainParser
 import json
 
 class ETrainAPIAsync:
-    def __init__(self, phpcookie=None, captcha_resolver: Callable[[str, list[str], str], str] = None):
+    def __init__(self, phpcookie=None, captcha_resolver: Callable[[str, list[str], str, str], str] = None):
         self.req_id = 0
         self.req_count = {}
         if AUTH_CACHE.exists():
@@ -78,13 +78,13 @@ class ETrainAPIAsync:
                 raise ETrainAPIError("failed to fetch captcha image")
 
             encoded_hash = match.group(1)
-            cache_file = f"{encoded_hash.replace('.', '_')}.png"
-            (CACHE_FOLDER / cache_file).write_bytes(await res.read())
+            captcha_file = f"{encoded_hash.replace('.', '_')}.png"
+            (CAPTCHA_FOLDER / captcha_file).write_bytes(await res.read())
 
         captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
         keys = [captcha.get_text() for captcha in captcha_btns]
 
-        key = await self.captcha_handler(encoded_hash, keys, error)
+        key = await self.captcha_handler(encoded_hash, keys, error, str(CAPTCHA_FOLDER / captcha_file))
         index = keys.index(key)
 
         decoded_hash = decode_hash(encoded_hash, index)

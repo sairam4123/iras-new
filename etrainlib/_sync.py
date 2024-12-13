@@ -8,6 +8,7 @@ from etrainlib.constants import (
     BASE_API,
     BASE_URL,
     AUTH_CACHE,
+    CAPTCHA_FOLDER,
     COMMON_HEADERS,
     API_VERSION,
     CACHE_FOLDER,
@@ -25,7 +26,7 @@ __all__ = ["ETrainAPI", "ETrainAPIError", "ETrainArrivalDepartureConfig", "CACHE
 
 
 class ETrainAPI:
-    def __init__(self, phpcookie=None, captcha_handler: Callable[[str, list[str]], str] = None):
+    def __init__(self, phpcookie=None, captcha_handler: Callable[[str, list[str], str, str], str] = None):
         self.req_id = 0
         self.req_count = {}
         if AUTH_CACHE.exists():
@@ -81,6 +82,7 @@ class ETrainAPI:
 
         captcha_soup = BeautifulSoup(code, "html.parser")
         image = captcha_soup.find("img", attrs={"class": "captchaimage"})
+        error = captcha_soup.find("span", attrs={"id": "captchaformerrormsg"}).get_text()
 
         res = self.session.get(BASE_URL + image.attrs["src"])
 
@@ -90,10 +92,10 @@ class ETrainAPI:
 
         encoded_hash = match.group(1)
         cache_file = f"{encoded_hash.replace('.', '_')}.png"
-        (CACHE_FOLDER / cache_file).write_bytes(res.content)
+        (CAPTCHA_FOLDER / cache_file).write_bytes(res.content)
         captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
         keys = [captcha.get_text() for captcha in captcha_btns]
-        key = self.captcha_handler(encoded_hash, keys)
+        key = self.captcha_handler(encoded_hash, keys, error, str(CAPTCHA_FOLDER / cache_file))
         index = keys.index(key)
         decoded_hash = decode_hash(encoded_hash, index)
 

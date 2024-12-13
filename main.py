@@ -86,9 +86,9 @@ class TrainBot(commands.Bot):
             author_id = announcements[guild_id]["author"]
             channel = await self.fetch_channel(channel_id)
 
-            async def _captcha_resolver(sd: str, keys: list[str], error: str) -> str:
+            async def _captcha_resolver(sd: str, keys: list[str], error: str, file: str) -> str:
                 view = CaptchaView(sd, keys, author_id)
-                await channel.send(f"Look at the below image and select the key: {error}", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
+                await channel.send(f"Look at the below image and select the key: {error}", file=discord.File(file), view=view, delete_after=180)
 
                 await view.wait()
                 key = view.selected
@@ -232,9 +232,9 @@ async def start_announcement(
 
     announcements[ctx.voice_client.guild.id] = {"station": station, "author": ctx.author.id, "channel": ctx.channel_id}
 
-    async def _captcha_handler(sd: str, keys: list[str], error: str) -> str:
+    async def _captcha_handler(sd: str, keys: list[str], error: str, file: str) -> str:
         view = CaptchaView(sd, keys, ctx.author.id)
-        await ctx.send(f"Look at the below image and select the key: {error}", file=discord.File(CACHE_FOLDER / f"{sd.replace('.', '_')}.png"), view=view, delete_after=180)
+        await ctx.send(f"Look at the below image and select the key: {error}", file=discord.File(file), view=view, delete_after=180)
 
         await view.wait()
         key = view.selected

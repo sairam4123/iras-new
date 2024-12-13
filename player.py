@@ -341,7 +341,7 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
             f.seek(0, 2)
         f.seek(0)
         segment: pydub.AudioSegment = pydub.AudioSegment.from_file(f)
-        return speedup(segment, playback_speed=1.25)
+        return speedup(segment, playback_speed=1.30)
 
 
 def format_train_name(train_name: str):
@@ -415,6 +415,7 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
             )
             (intro + silent + (announcement + 3)).export(str(ann_file), format="wav")
             announcements.append(ann_file)
+            # if dep_time is not available, then send the arrival time
             yield [ann_file, dep_time or arr_time, priority]
         
 

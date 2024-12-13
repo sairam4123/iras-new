@@ -26,6 +26,9 @@ BASE_URL = "https://etrain.info"
 CACHE_FOLDER = Path(".etrain-cache")
 CACHE_FOLDER.mkdir(exist_ok=True)
 
+CAPTCHA_FOLDER = CACHE_FOLDER / "captcha"
+CAPTCHA_FOLDER.mkdir(exist_ok=True)
+
 COMMON_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
     "Host": "etrain.info",
