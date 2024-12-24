@@ -9,7 +9,6 @@ from pydub import AudioSegment
 from pydub.playback import play
 
 from player import main as player_main
-from etrainlib import async_default_captcha_resolver
 
 station_name = 'Tambaram'
 station_code = 'TBM'
@@ -31,6 +30,7 @@ async def async_console_captcha_resolver(sd: str, keys: list[str], error: str, f
     key = await ainput(
         f"{error}\nPossible keys are: {keys}\n> "
     )
+    print(f"You selected: {key}")
     return key.strip()
 
 # Producer function
