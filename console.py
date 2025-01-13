@@ -18,7 +18,7 @@ STATIONS_FILE = 'stations.json'
 def fetch_station_name(station_code: str) -> str:
     station_code = station_code.upper()
     stations = json.load(open(STATIONS_FILE))
-    return stations[station_code]['name']
+    return stations.get(station_code, {'name': None})['name']
 
 ANNOUNCEMENTS = []
 
@@ -62,6 +62,9 @@ async def main():
     global station_name, station_code
     station_code = await ainput('Select station:> ')
     station_name = fetch_station_name(station_code)
+    if station_name is None:
+        await aprint("Station not found")
+        return
     await aprint("Station selected: " + station_name)
     fetch = asyncio.create_task(fetch_announcements())
     play_ann = asyncio.create_task(play_announcements())

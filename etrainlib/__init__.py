@@ -1,4 +1,7 @@
-from ._sync import ETrainAPI, ETrainAPIError, ETrainArrivalDepartureConfig, CACHE_FOLDER
+from ._async import ETrainAPIAsync
+from ._sync import ETrainAPISync
+from .constants import ETrainAllTrainsConfig, ETrainAPIError, ETrainArrivalDepartureConfig, CACHE_FOLDER
+from .parser import ETrainParser
 import asyncio
 
 

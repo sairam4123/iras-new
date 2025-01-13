@@ -6,7 +6,8 @@ from aiohttp import ClientResponse as Response
 import bs4
 from .constants import API_VERSION, BASE_API, BASE_URL, CACHE_FOLDER, CAPTCHA_FOLDER, COMMON_HEADERS, AUTH_CACHE, ETrainAPIError, ETrainAllTrainsConfig, ETrainArrivalDepartureConfig, build_formdata, build_url, decode_hash
 from .parser import ETrainParser
-import json
+
+__all__ = ['ETrainAPIAsync']
 
 class ETrainAPIAsync:
     def __init__(self, phpcookie=None, captcha_resolver: Callable[[str, list[str], str, str], str] = None):
@@ -23,13 +24,10 @@ class ETrainAPIAsync:
         self.parser = ETrainParser()
     
     def _get_request_info(self, query):
-        # if query["q"] not in self.req_count:
-        #     self.req_count[query["q"]] = 1
         return {"reqID": self.req_id, "reqCount": 1}
 
     def _increment_request_info(self, query):
         self.req_id += 1
-        # self.req_count[query["q"]] += 1
     
     async def _request(self, path: str = None, query: dict=None, form_data: dict=None):
         query = query or {}
@@ -48,44 +46,61 @@ class ETrainAPIAsync:
             except (ValueError, Exception) as e:
                 raise e
             else:
+
                 if "captcha" in json.get("sscript", {}):
-                    curr_cookie = res.cookies.get("PHPSESSID")
-                    if curr_cookie != self._phpcookie:
-                        self._phpcookie = curr_cookie.coded_value
-                        self.session.cookie_jar.update_cookies({"PHPSESSID": self._phpcookie})
-                    print("DEBUG: Setting new session token")
-                    if await self.request_new_token(json):
-                        return await self._request(path, query, form_data)
+                    curr_cookie = res.cookies.get("PHPSESSID") # get new token
+                    if not await self._update_cookie(curr_cookie):
+                        raise ETrainAPIError("failed to update cookie")
+                    if not await self.authenticate(json):
+                        raise ETrainAPIError("failed to authenticate")
+                    return await self._request(path, query, form_data)
+                
                 if "error" in json:
                     raise ETrainAPIError(json["error"])
+                
             return json
     
-    async def request_new_token(self, json_resp):
+    
+    async def _update_cookie(self, _curr_cookie: str):
+        if _curr_cookie != self._phpcookie:
+            self._phpcookie = _curr_cookie.coded_value
+            self.session.cookie_jar.update_cookies({"PHPSESSID": self._phpcookie})
+            print("DEBUG: Setting new session token and authenticating...")
+            return True
+        return False
+
+
+    async def authenticate(self, json_resp):
         code = json_resp.get("sscript")
 
         captcha_soup = bs4.BeautifulSoup(code, "html.parser")
         image = captcha_soup.find("img", attrs={"class": "captchaimage"})
         error = captcha_soup.find("span", attrs={"id": "captchaformerrormsg"}).get_text()
+        captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
+        keys = [captcha.get_text() for captcha in captcha_btns]
 
         match = re.search(r"sD\s*=\s*'([^']+)'", code)
+        encoded_hash = match.group(1)
+        
         if not match:
+            print("DEBUG: Invalid captcha data found, writing to invalid-captcha.html for debugging")
             (CACHE_FOLDER / "invalid-captcha.html").write_text(code)
             raise ETrainAPIError("invalid captchadata found", match)
         
+
         async with self.session.get(BASE_URL + image.attrs["src"]) as res:
             res: Response
             if res.status != 200:
                 raise ETrainAPIError("failed to fetch captcha image")
-
-            encoded_hash = match.group(1)
             captcha_file = f"{encoded_hash.replace('.', '_')}.png"
             (CAPTCHA_FOLDER / captcha_file).write_bytes(await res.read())
 
-        captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
-        keys = [captcha.get_text() for captcha in captcha_btns]
-
         key = await self.captcha_handler(encoded_hash, keys, error, str(CAPTCHA_FOLDER / captcha_file))
-        index = keys.index(key)
+        try:
+            index = keys.index(key)
+        except (ValueError, IndexError):
+            raise ETrainAPIError("invalid captcha key")
+        
 
         decoded_hash = decode_hash(encoded_hash, index)
 

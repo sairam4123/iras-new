@@ -10,7 +10,7 @@ import asyncio
 
 from etrainlib import async_default_captcha_resolver, default_captcha_handler
 from etrainlib._async import ETrainAPIAsync
-from etrainlib._sync import ETrainAPI
+from etrainlib._sync import ETrainAPISync
 
 
 STATION_FILE = Path("stations.json")
@@ -295,7 +295,7 @@ Your kind attention please! Train number: {train[no]} {train[name]}. Coach posit
 def coach_pos_main(train_no: str, train_name: str):
     train_correct_number = " ; ".join(train_no[:]) + " ;"
 
-    with ETrainAPI(captcha_handler=default_captcha_handler) as etrain:
+    with ETrainAPISync(captcha_handler=default_captcha_handler) as etrain:
         coach_pos = etrain.get_coach_positions(train_no, train_name)
 
     coach_pos_str = ";".join(

@@ -3,6 +3,7 @@ import datetime
 from pathlib import Path
 import re
 import urllib
+import base64
 
 
 
@@ -70,6 +71,7 @@ def decode_hash(encoded_hash, key):
     i = 0
     prev = 0
 
+    # Decode the hash using base64
     while i < len(encoded_hash):
         cur = digits.index(encoded_hash[i])
         digitNum = i % 4
@@ -86,6 +88,7 @@ def decode_hash(encoded_hash, key):
 
     encoded_hash = "".join(result)
 
+    # Apply Vigener Cipher
     key = str(key)
     for i in range(len(encoded_hash)):
         char = encoded_hash[i]

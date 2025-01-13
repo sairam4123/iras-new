@@ -338,7 +338,7 @@
 # # print(page_content)
 
 import datetime
-from etrainlib import ETrainAPI, ETrainArrivalDepartureConfig, default_captcha_handler, async_default_captcha_resolver
+from etrainlib import ETrainAPISync, ETrainArrivalDepartureConfig, default_captcha_handler, async_default_captcha_resolver
 from etrainlib._async import ETrainAPIAsync
 import asyncio
 

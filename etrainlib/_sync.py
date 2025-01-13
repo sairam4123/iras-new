@@ -20,12 +20,12 @@ from etrainlib.constants import (
 )
 from etrainlib.parser import ETrainParser
 
-__all__ = ["ETrainAPI", "ETrainAPIError", "ETrainArrivalDepartureConfig", "CACHE_FOLDER"]
+__all__ = ["ETrainAPISync"]
 
 
 
 
-class ETrainAPI:
+class ETrainAPISync:
     def __init__(self, phpcookie=None, captcha_handler: Callable[[str, list[str], str, str], str] = None):
         self.req_id = 0
         self.req_count = {}
@@ -53,16 +53,22 @@ class ETrainAPI:
             return None
         else:
             if "captcha" in json.get("sscript", {}):
-                curr_cookie = res.cookies.get("PHPSESSID")
-                if curr_cookie != self._phpcookie:
-                    self._phpcookie = curr_cookie
-                    self.session.cookies.set("PHPSESSID", self._phpcookie)
-                print("DEBUG: Setting new session token.")
-                if self.request_new_token(json):
+                curr_cookie = res.cookies.get("PHPSESSID")  # get new token
+                if not self._update_cookie(curr_cookie):
+                    raise ETrainAPIError("failed to update cookie")
+                if self.authenticate(json):
                     return self._request(path, query, form_data)
             if "error" in json:
                 raise ETrainAPIError(json["error"])
         return json
+    
+    def _update_cookie(self, _curr_cookie: str):
+        if _curr_cookie == self._phpcookie:
+            return False
+        print("DEBUG: Setting new session token.")
+        self._phpcookie = _curr_cookie
+        self.session.cookies.set("PHPSESSID", self._phpcookie)
+        return True
 
     @property
     def session_cookie(self):
@@ -77,7 +83,7 @@ class ETrainAPI:
         self.req_id += 1
         self.req_count[query["q"]] += 1
 
-    def request_new_token(self, json_resp):
+    def authenticate(self, json_resp):
         code = json_resp.get("sscript")
 
         captcha_soup = BeautifulSoup(code, "html.parser")
@@ -96,7 +102,10 @@ class ETrainAPI:
         captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
         keys = [captcha.get_text() for captcha in captcha_btns]
         key = self.captcha_handler(encoded_hash, keys, error, str(CAPTCHA_FOLDER / cache_file))
-        index = keys.index(key)
+        try:
+            index = keys.index(key)
+        except IndexError:
+            raise ETrainAPIError("invalid captcha key")
         decoded_hash = decode_hash(encoded_hash, index)
 
         new_json_resp = self._request(
