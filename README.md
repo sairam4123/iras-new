@@ -13,6 +13,12 @@ This project is the successor to the [Indian\_Railways\_Announcement\_System](ht
 
 This project originated as a Discord Bot designed to replicate Indian Railways announcements. Over time, after studying the detailed documentation provided by RDSO (Research Design and Standards Organization), it was expanded into a console-based application for broader use.
 
+## Dependencies
+1. FFMpeg (Download from https://www.ffmpeg.org/)
+2. eSpeak-NG
+   - This dependency is only needed if you're going to run Discord App. (Not recommended)
+3. Discord Bot Token:
+   - This dependency is only needed if you're going to run Discord App. (Not recommended)
 
 ## Running the Project
 
@@ -28,7 +34,7 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
      ```
 
 2. **Activate the virtual environment**:
-    - Use `poetry shell` to activate the virtual environment. If a venv doesn't exist, then Poetry will create one for you.
+    - Use `poetry env activate` to activate the virtual environment. If a venv doesn't exist, then Poetry will create one for you.
 
 3. **Start the Project**:
 
