@@ -27,7 +27,10 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
      pip install poetry
      ```
 
-2. **Start the Project**:
+2. **Activate the virtual environment**:
+    - Use `poetry shell` to activate the virtual environment. If a venv doesn't exist, then Poetry will create one for you.
+
+3. **Start the Project**:
 
    - For the Console App:
      ```bash
