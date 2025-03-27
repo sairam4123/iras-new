@@ -3,6 +3,7 @@ from pathlib import Path
 import io
 from gtts import gTTS
 from py_trans import PyTranslator
+from py_trans.errors import UnableToTranslate
 import pydub
 from pydub.effects import speedup
 import datetime
@@ -56,7 +57,7 @@ local_train_abbvs = {
 
 arrival_shortly = {
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும். 
 """,
     "en": """
 Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
@@ -68,7 +69,7 @@ Your kind attention please! Train number: {train[no]} {train[name]} coming from 
 
 arrival_shortly_middle = {
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும்.
 """,
     "en": """
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
@@ -79,38 +80,38 @@ Your kind attention please! Train number: {train[no]} {train[name]} bound for {t
 }
 
 arrival_on = {
-    "en": """
-Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} is arriving on platform number {train[pf]}.
+    "ta": """
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
 """,
     "hi": """
 Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} is coming on platform number {train[pf]}.
 """,
-    "ta": """
+    "en": """
 Passengers attention please, Train number: {train[no]} {train[name]} coming from {train[src]} is arriving on platform number {train[pf]}.
 """
 }
 
 arrival_on_middle = {
-    "en": """
-Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is arriving on platform number {train[pf]}.
+    "ta": """
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
 """,
     "hi": """
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is coming on platform number {train[pf]}.
 """,
-    "ta": """
+    "en": """
 Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is arriving on platform number {train[pf]}.
 """
 }
 
 arrival = {
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து வரும் is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
 """,
     "hi": """
 Your kind attention please! Train number: {train[no]} {train[name]} coming from {train[src]}, there is a possiblity to come at {train[arr_time]} on platform number {train[pf]}.
 """,
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து வரும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பாகபடுகிறது.
 """
 }
 
@@ -122,7 +123,7 @@ Your kind attention please! Train number: {train[no]} {train[name]} bound for {t
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} there is a possiblity to come at {train[arr_time]} on platform number {train[pf]}.
 """,
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[arr_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பாகபடுகிறது.
 """
 }
 
@@ -134,7 +135,7 @@ Your kind attention please! Train number: {train[no]} {train[name]} bound for {t
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is scheduled to leave from platform number {train[pf]} at {train[dept_time]}.
 """,
     "ta": """
-    Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is scheduled to depart from platform number {train[pf]} at {train[dept_time]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபடும்.
 """
 }
 
@@ -146,19 +147,19 @@ Your kind attention please! Train number: {train[no]} {train[name]} bound for {t
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is ready to leave from platform number {train[pf]} at {train[dept_time]}.
 """,
     "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is ready to depart from platform number {train[pf]} at {train[dept_time]}.
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபட தயாராக உள்ளது.
 """
 
 }
 on_platform = {
+    "ta": """
+பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]} {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் உள்ளது.
+""",
     "en": """
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is on platform number {train[pf]}.
 """,
     "hi": """
 Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is on platform number {train[pf]}.
-""",
-    "ta": """
-Passengers attention please, Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} is on platform number {train[pf]}.
 """
 }
 
@@ -171,11 +172,11 @@ goodbye = """
 """
 
 diverted = """
-Your kind attention please! Train number: {train[no]} {train[name]} bound or {train[dest]} from {train[src]} has been diverted to travel via {train[diversion]}. We deeply regret the inconvinence caused to you.
+Your kind attention please! Train number: {train[no]} {train[name]} bound or {train[dest]} from {train[src]} has been diverted to travel via {train[diversion]}. We deeply regret the inconvinence caused..
 """
 
 rescheduled = """
-Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} scheduled to depart at {train[tt_dept]} has been rescheduled. The new departure time is {train[dept_time]}. We deeply regret the inconvinence caused
+Your kind attention please! Train number: {train[no]} {train[name]} bound for {train[dest]} from {train[src]} scheduled to depart at {train[tt_dept]} has been rescheduled. The new departure time is {train[dept_time]}. We deeply regret the inconvinence caused..
 """
 
 def parse_arrdep_time(train, cur_time) -> tuple[datetime.datetime | None, datetime.datetime | None]:
@@ -350,7 +351,7 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
     with io.BytesIO() as f:
         for lang in languages:
             msg = text_msg[lang].replace("\n", " ").format_map(format_map)
-            translated = pytrans.translate_dict(msg, dest=lang)["translation"]
+            translated = translate(msg, lang, pytrans)
             print(translated)
             print(f"Generating for language: {lang}")
             gTTS(text=translated, lang=lang, tld="co.in").write_to_fp(f)
@@ -360,6 +361,22 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
         f.seek(0)
         segment: pydub.AudioSegment = pydub.AudioSegment.from_file(f)
         return speedup(segment, playback_speed=1.30)
+
+def translate(text_msg, language=None, translator: PyTranslator = None):
+    translator = translator or PyTranslator()
+    language = language or LANGUAGES[0]
+    try:
+        translated = translator.translate_com(text_msg, dest=language)["translation"]
+    except UnableToTranslate:
+        try:
+            translated = translator.translate_dict(text_msg, dest=language)["translation"]
+        except UnableToTranslate:
+            try:
+                translated = translator.google(text_msg, dest=language)["translation"]
+            except UnableToTranslate:
+                translated = text_msg
+    return translated
+
 
 
 def format_train_name(train_name: str):
