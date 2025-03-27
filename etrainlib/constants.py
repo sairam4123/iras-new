@@ -21,7 +21,7 @@ def build_formdata(form_data={}):
 
 
 BASE_API = "https://etrain.info/"
-API_VERSION = "3.4.11"
+API_VERSION = "3.4.11.0"
 BASE_URL = "https://etrain.info"
 
 CACHE_FOLDER = Path(".etrain-cache")

@@ -24,19 +24,34 @@ ANNOUNCEMENTS_PATH = Path("announcements")
 ANNOUNCEMENTS_PATH.mkdir(exist_ok=True)
 
 abbvs = {
+    " VANDE BHARAT ": " VANDE BHARAT EXPRESS ",
     " VB EXP ": " VANDE BHARAT EXPRESS ",
-    " SEMI FAST ": " SEMI FAST local train ",
-    " FAST ": " FAST local train ",
-    " SMPRK KRNTI ": "SAMPRAK KRANTI",
-    " EXP ": " Express ",
-    " EX ": " Express ",
+    " JS ": " JAN SHATABDI ",
     " SF ": " Superfast ",
+    " EX ": " Express ",
     " SPL ": " Special ",
     " LOCAL ": " LOCAL ",
-    " J ": " JUNCTION ",
-    " JN ": " JUNCTION ",
-    " CNTL ": " CENTRAL ",
-    "Cant": "CANTONMENT",
+    " EXP ": " Express ",
+    " SMPRK KRNTI ": " SAMPRAK KRANTI ",
+    " PCET ": " PARCEL CARGO EXPRESS TRAIN ",
+    
+    " SEMI ": " SEMI FAST ",
+    " FAST ": " FAST local train ",
+}
+
+station_abbvs = {
+    " JN": " JUNCTION",
+    " CNTL": " CENTRAL",
+    " Cantt": "CANTONMENT",
+    " RD": " ROAD",
+    " JN.": " JUNCTION",
+    " HLT": " HALT",
+    # " T": " TERMINUS",
+}
+
+local_train_abbvs = {
+    " FAST": " FAST local train ",
+    " SEMI ": "SEMI FAST ",
 }
 
 arrival_shortly = {
@@ -261,22 +276,25 @@ def choose_msg(train, cur_time: datetime.datetime) -> str:
 def replace_stn_names(_str: str) -> str:
     str_list = _str.split(" ")
     for index, str_ in enumerate(str_list):
-        if str_ in station_map:
-            str_list[index] = station_map[str_].lower()
+        if str_ in ann_station_map:
+            str_list[index] = ann_station_map[str_].lower()
     return " ".join(str_list)
 
 
-def replace_abbvs(_str: str) -> str:
+def replace_abbvs(_str: str, abbvs_: dict[str, str] = None) -> str:
+    abbvs_ = abbvs_ or abbvs
     res = _str
-    for abbv in abbvs:
-        res = res.replace(abbv.lower(), abbvs[abbv].lower())
-        res = res.replace(abbv.upper(), abbvs[abbv].lower())
+    for abbv in abbvs_:
+        res = res.replace(abbv.lower(), abbvs_[abbv].lower())
+        res = res.replace(abbv.upper(), abbvs_[abbv].lower())
+        print(abbv, abbvs_[abbv], res)
     return res
 
 
 station_map = json.loads(STATION_FILE.read_text())
 station_map = {std_c: replace_abbvs(sta["name"]) for std_c, sta in station_map.items()}
-
+ann_station_map = {std_c: replace_abbvs(sta, station_abbvs) for std_c, sta in station_map.items()}
+print(ann_station_map)
 
 coach_pos_abbv = {
     "PWR": "P W R",
@@ -347,22 +365,29 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
 def format_train_name(train_name: str):
     src, *dest, name = train_name.strip().split(" ")
     print(src, dest, name)
+    mid = dest
     if "-" in src:
         src, dest = src.split("-")  # handles SRC-DEST
     elif len(dest) == 0:
         dest = ""
-    elif len(dest) == 1:
+    elif len(dest) == 1 and len(mid) == 1:
         dest = dest[0]
+        mid = mid[0]
     
-    elif len(dest) >= 2:
+    elif len(dest) >= 2 and len(mid) >= 2:
         dest = " ".join(dest)
-    return replace_abbvs(
-        replace_stn_names(
+        mid = " ".join(mid)
+    if mid == dest:
+        return replace_stn_names(
             replace_abbvs(
             f"{src} {dest} {name} "
         )
+        ).strip()
+    return replace_stn_names(
+            replace_abbvs(
+            f"{src} {dest} {" ".join(mid)} {name} "
         )
-    ).strip()
+        ).strip()
 
 
 async def main(station_name: str, std_code: str, time: datetime.datetime = None, captcha_resolver = None):
@@ -451,4 +476,7 @@ def welcome_f(stn_name: str):
 
 if __name__ == "__main__":
     # coach_pos_main("12605", "PALLAVAN EXP")
-    print(asyncio.run(main("Tiruchirapalli Junction", "TPJ")))
+    # print(asyncio.run(main("Tiruchirapalli Junction", "TPJ")))
+    while True:
+        name = input("Train name:> ")
+        print(format_train_name(name))

@@ -8,4 +8,9 @@ announcements/
 
 trains.json
 
+# Discord Token file
 *.tkn
+
+# Pyinstaller build
+build/
+dist/
