@@ -1,32 +1,35 @@
-[tool.poetry]
+[project]
 name = "new-discord-voicereceive"
 version = "0.1.0"
 description = ""
-authors = ["sairam4123 <kannanscoffee@outlook.com>"]
+authors = [{ name = "sairam4123", email = "kannanscoffee@outlook.com" }]
+requires-python = ">=3.13, <3.14"
 license = "AGPL-3.0-or-later"
-package-mode = false
+dependencies = [
+    "gtts<=2.5.6",
+    "python-dateutil>=2.8.2,<3",
+    "parsedatetime~=2.6",
+    "pydub>=0.25.1,<0.26",
+    "py-cord[voice]>=2.2.2,<3",
+    "pocketsphinx>=5.0.0,<6",
+    "vosk>=0.3.44,<0.4",
+    "pyAudio>=0.2.12,<0.3",
+    "wavelink>=1.3.3,<2",
+    "SpeechRecognition>=3.10.0,<4",
+    "py-trans==0.6.1",
+    "aiofiles>=24.1.0,<25",
+    "beautifulsoup4>=4.12.3,<5",
+    "aioconsole>=0.8.1,<0.9",
+    "climage>=0.2.2,<0.3",
+    "audioop-lts>=0.2.1,<0.3 ; python_version >= '3.13'",
+    "yapper-tts>=0.7.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8,<3.14"
-gTTS = "^2.2.4"
-python-dateutil = "^2.8.2"
-parsedatetime = "^2.6"
-pydub = "^0.25.1"
-py-cord = {extras = ["voice"], version = "^2.2.2"}
-pocketsphinx = "^5.0.0"
-vosk = "^0.3.44"
-pyAudio = "^0.2.12"
-wavelink = "^1.3.3"
-SpeechRecognition = "^3.10.0"
-py-trans = "^0.6.1"
-aiofiles = "^24.1.0"
-beautifulsoup4 = "^4.12.3"
-aioconsole = "^0.8.1"
-climage = "^0.2.2"
-audioop-lts = { version = "^0.2.1", markers = "python_version >= '3.13'" }
+[dependency-groups]
+dev = ["pyinstaller>=6.12.0,<7"]
 
-[tool.poetry.group.dev.dependencies]
-pyinstaller = "^6.12.0"
+[tool.uv]
+package = false
 
 [build-system]
 requires = ["poetry>=0.12"]

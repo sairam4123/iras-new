@@ -14,3 +14,5 @@ trains.json
 # Pyinstaller build
 build/
 dist/
+
+gen-lang-client.json
