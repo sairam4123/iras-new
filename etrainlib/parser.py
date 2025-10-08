@@ -71,7 +71,9 @@ class ETrainParser:
         parsed_trains = []
         for table_row in soup.findAll("tr"):
             table_row: bs4.PageElement
-            train_info = table_row.get_text(" ; ").split(" ; ")
+            train_info = table_row.find_all_next("td")
+            train_info = [x.get_text().strip() for x in train_info]
+            print("DEBUG:", train_info)
             train_info = {
                 "train_no": train_info[0],
                 "train_name": train_info[1],

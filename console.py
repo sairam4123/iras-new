@@ -22,7 +22,7 @@ def fetch_station_name(station_code: str) -> str:
 
 ANNOUNCEMENTS = []
 
-TIME_BETWEEN_ANN_SEC = 40  # 1 minute 30 seconds or 90 seconds
+TIME_BETWEEN_ANN_SEC = 70  # 1 minute 30 seconds or 90 seconds
 
 async def async_console_captcha_resolver(sd: str, keys: list[str], error: str, file: str) -> str:
     image = climage.convert(file, width=80, is_unicode=True, is_truecolor=True, is_256color=False)
@@ -49,12 +49,24 @@ async def play_announcements():
             priority, dept_time, ann_file = heapq.heappop(ANNOUNCEMENTS)
             await aprint(f'Priority: {priority}, Dept Time: {dept_time}, Announcement: {ann_file}')
             current_time = datetime.datetime.now()
+            if dept_time is None:
+                dept_time = current_time
             if dept_time < current_time:
                 continue
             ann_seg: AudioSegment = AudioSegment.from_file(ann_file)
-            asyncio.get_event_loop().run_in_executor(None, play, ann_seg)
-            await asyncio.sleep(ann_seg.duration_seconds)
-            await asyncio.sleep(2)
+            try:
+                task = asyncio.get_event_loop().run_in_executor(None, play, ann_seg)
+
+                while True:
+                    await asyncio.sleep(0.5)
+                    if task.done():
+                        break
+
+            except KeyboardInterrupt:
+                task.cancel()
+                print("Playback interrupted")
+                break
+
         else:
             await asyncio.sleep(1)
 
