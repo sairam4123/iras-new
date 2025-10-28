@@ -22,7 +22,7 @@ def fetch_station_name(station_code: str) -> str:
 
 ANNOUNCEMENTS = []
 
-TIME_BETWEEN_ANN_SEC = 70  # 1 minute 30 seconds or 90 seconds
+TIME_BETWEEN_ANN_SEC = 70  # 1 minute 10 seconds or 70 seconds
 
 async def async_console_captcha_resolver(sd: str, keys: list[str], error: str, file: str) -> str:
     image = climage.convert(file, width=80, is_unicode=True, is_truecolor=True, is_256color=False)
@@ -51,7 +51,9 @@ async def play_announcements():
             current_time = datetime.datetime.now()
             if dept_time is None:
                 dept_time = current_time
+
             if dept_time < current_time:
+                print(f"Announcement time is in the past, skipping. {dept_time} < {current_time} - {dept_time - current_time:.2f} seconds; {ann_file}")
                 continue
             ann_seg: AudioSegment = AudioSegment.from_file(ann_file)
             try:
@@ -72,7 +74,7 @@ async def play_announcements():
 
 async def main():
     global station_name, station_code
-    station_code = await ainput('Select station:> ')
+    station_code = (str(await ainput('Select station:> '))).upper().strip()
     station_name = fetch_station_name(station_code)
     if station_name is None:
         await aprint("Station not found")
@@ -84,4 +86,8 @@ async def main():
     await asyncio.gather(fetch, play_ann)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Exiting...")
+        exit(0)

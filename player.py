@@ -12,21 +12,29 @@ import asyncio
 
 # from yapper import PiperSpeaker, PiperVoice
 import os
+import heapq
+
+
 
 from etrainlib import async_default_captcha_resolver, default_captcha_handler
 from etrainlib._async import ETrainAPIAsync
 from etrainlib._sync import ETrainAPISync
 
+from speaker import t2s
 
 STATION_FILE = Path("stations.json")
 TRAIN_FILE = Path("trains.json")
 DATA_FILE = Path("data.json")
-LANGUAGES = ["ta", "hi", "en"]
+LANGUAGES = ["ta-IN", "hi-IN", "en-IN"]
 INTROS: list[pydub.AudioSegment] = [(pydub.AudioSegment.from_file(path) ) for path in (Path("announcers") / "sounds").iterdir()] 
 TPJ_ANN = INTROS[2] + INTROS[2]
 INTROS.insert(0, TPJ_ANN)
-ANNOUNCEMENTS_PATH = Path("announcements")
-ANNOUNCEMENTS_PATH.mkdir(exist_ok=True)
+ANNOUNCEMENTS_PATH = Path("anns/trains")
+ANNOUNCEMENTS_PATH.mkdir(exist_ok=True, parents=True)
+
+NSG_DATA_PATH = Path("dataset/station/nsg_data.json")
+
+nsg_data: dict[str, int] = json.loads(NSG_DATA_PATH.read_text())
 
 abbvs = {
     " VANDE BHARAT ": " VANDE BHARAT EXPRESS ",
@@ -47,7 +55,8 @@ abbvs = {
 station_abbvs = {
     " JN": " JUNCTION",
     " CNTL": " CENTRAL",
-    " Cantt": "CANTONMENT",
+    " Cantt": " CANTONMENT",
+    " Cant": " CANTONMENT",
     " RD": " ROAD",
     " JN.": " JUNCTION",
     " HLT": " HALT",
@@ -61,31 +70,31 @@ local_train_abbvs = {
 
 arrival_shortly = {
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும். 
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும். 
 """,
     "en": """
 Your kind attention please! Train number: {train[no]} {train[name]}; coming from {train[src]} will arrive shortly on platform number {train[pf]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से अनेवाली गाड़ी कोडी की थेर मे प्लेटफॉर्म नंबर {train[pf]} पर आईगी।
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से अनेवाली गाड़ी कोडी की थेर मे प्लेटफॉर्म नंबर {train[pf]} पर आईगी ।
 """
 }
 
 arrival_shortly_middle = {
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும்.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் இன்னும் செறிது நேரதில் வந்து சேரும்.
 """,
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} will arrive shortly on platform number {train[pf]}.
+Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]}; via {train[via]} will arrive shortly on platform number {train[pf]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी कोडी की थेर मे प्लेटफॉर्म नंबर {train[pf]} पर आईगी। 
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी कोडी की थेर मे प्लेटफॉर्म नंबर {train[pf]} पर आईगी । 
 """
 }
 
 arrival_on = {
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
 """,
     "hi": """
 यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी प्लेटफॉर्म नंबर {train[pf]} पर आरही हे । 
@@ -97,13 +106,13 @@ Passengers attention please, Train number: {train[no]} {train[name]}; coming fro
 
 arrival_on_middle = {
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் வந்துகொண்டிருக்கிறது.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी प्लेटफॉर्म नंबर {train[pf]} पर आरही हे ।
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी प्लेटफॉर्म नंबर {train[pf]} पर आरही हे ।
 """,
     "en": """
-Passengers attention please, Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} is arriving on platform number {train[pf]}.
+Passengers attention please, Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]}; via {train[via]} is arriving on platform number {train[pf]}.
 """
 }
 
@@ -112,58 +121,58 @@ arrival = {
 Your kind attention please! Train number: {train[no]} {train[name]}; coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; coming from {train[src]}, there is a possiblity to come at {train[arr_time]} on platform number {train[pf]}.
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से आनेवाली गाड़ी {train[arr_time]}-पर प्लेटफॉर्म नंबर {train[pf]} पर आनेकी सम्भावना है।
 """,
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[arr_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பாகபடுகிறது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து வரும் இரயில் {train[arr_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பார்க்கப்படுகிறது.
 """
 }
 
 arrival_middle = {
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
+Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} via {train[via]} is expected to arrive at {train[arr_time]} on platform number {train[pf]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी {train[arr_time]}-पर प्लेटफॉर्म नंबर {train[pf]} पर आनेकी सम्भावना है।
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी {train[arr_time]}-पर प्लेटफॉर्म नंबर {train[pf]} पर आनेकी सम्भावना है।
 """,
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[arr_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பாகபடுகிறது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[arr_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்திற்கு வந்து சேரும் என எதிர்பார்க்கப்படுகிறது.
 """
 }
 
 departure = {
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} from {train[src]} is scheduled to depart from platform number {train[pf]} at {train[dept_time]}.
+Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} via {train[via]} is scheduled to depart from platform number {train[pf]} at {train[dept_time]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी {train[dept_time]}-पर प्लेटफॉर्म नंबर {train[pf]}-से रवाना होगी । 
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी {train[dept_time]}-पर प्लेटफॉर्म नंबर {train[pf]}-से रवाना होगी । 
 """,
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபடும்.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபடும்.
 """
 }
 
 departure_ready = {
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} from {train[src]} is ready for departure from platform number {train[pf]} at {train[dept_time]}.
+Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} coming from {train[src]} via {train[via]} is ready for departure from platform number {train[pf]} at {train[dept_time]}.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी {train[dept_time]}-पर; प्लेटफॉर्म नंबर {train[pf]}-से रवाना होनेकेलिए तयार है। 
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी {train[dept_time]}-पर; प्लेटफॉर्म नंबर {train[pf]}-से रवाना होनेकेलिए तयार है। 
 """,
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபட தயாராக உள்ளது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[dept_time]}-மணிக்கு {train[pf]}-ஆவது பிளாட்பார்த்தில்-இருந்து புறபட தயாராக உள்ளது.
 """
 
 }
 on_platform = {
     "ta": """
-பயணிகளின் கனிவான கவனதிற்கு, இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் உள்ளது.
+பயணிகளின் கனிவான கவனதிற்கு; இரயில் எண்: {train[no]} {train[name]}; {train[src]}-இல் இருந்து {train[via]} வழியாக {train[dest]}-வரை செல்லும் இரயில் {train[pf]}-ஆவது பிளாட்பார்த்தில் உள்ளது.
 """,
     "hi": """
-यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[dest]}-तक जानेवाली गाड़ी प्लेटफॉर्म नंबर {train[pf]} पर खड़ी है। 
+यात्रिकन करूपीया ध्यान थे! गाड़ी संकया: {train[no]} {train[name]}; {train[src]}-से {train[via]} मारगसे {train[dest]}-तक जानेवाली गाड़ी प्लेटफॉर्म नंबर {train[pf]} पर खड़ी है। 
 """,
     "en": """
-Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} from {train[src]} is on platform number {train[pf]}.
+Your kind attention please! Train number: {train[no]} {train[name]}; bound for {train[dest]} from {train[src]} via {train[via]} is on platform number {train[pf]}.
 """
 }
 
@@ -320,6 +329,59 @@ coach_pos_abbv = {
     "GRD": "S L R D,",
 }
 
+number_map = {
+    "0": {
+        "en": "Zero",
+        "hi": "शून्य",
+        "ta": "பூஜ்ஜியம்",
+    },
+    "1": {
+        "en": "One",
+        "hi": "एक",
+        "ta": "ஒன்று",
+    },
+    "2": {
+        "en": "Two",
+        "hi": "दो",
+        "ta": "இரண்டு",
+    },
+    "3": {
+        "en": "Three",
+        "hi": "तीन",
+        "ta": "மூன்று",
+    },
+    "4": {
+        "en": "Four",
+        "hi": "चार",
+        "ta": "நான்கு",
+    },
+    "5": {
+        "en": "Five",
+        "hi": "पांच",
+        "ta": "ஐந்து",
+    },
+    "6": {
+        "en": "Six",
+        "hi": "छह",
+        "ta": "ஆறு",
+    },
+    "7": {
+        "en": "Seven",
+        "hi": "सात",
+        "ta": "ஏழு",
+    },
+    "8": {
+        "en": "Eight",
+        "hi": "आठ",
+        "ta": "எட்டு",
+    },
+    "9": {
+        "en": "Nine",
+        "hi": "नौ",
+        "ta": "ஒன்பது",
+    },
+}
+
 coach_pos_ann = """
 Your kind attention please! Train number: {train[no]} {train[name]}. Coach position from engine:
 {train[coach_pos]}.
@@ -331,8 +393,8 @@ def tts(msg, f, lang="en"):
         
     # except Exception as e:
         # print("Error using yapper, falling back to gTTS", e)
-        gTTS(text=msg, lang=lang, tld="co.in", slow=False).write_to_fp(f)
-    
+        # gTTS(text=msg, lang=lang, tld="co.in", slow=False).write_to_fp(f)
+       t2s(msg, f, lang=lang)
 
 
 
@@ -369,10 +431,10 @@ def coach_pos_main(train_no: str, train_name: str):
         f.seek(0)
         silent = pydub.AudioSegment.silent(duration=500)
         announcement = pydub.AudioSegment.from_file(f)
-        segment = speedup(announcement, playback_speed=1.30)
+        # announcement = speedup(announcement, playback_speed=1.0)
 
         ann_file = ANNOUNCEMENTS_PATH / f"{train_name.replace(' ', '_')}.wav"
-        (intro + silent + segment).export(str(ann_file), format="wav")
+        (intro + silent + announcement).export(str(ann_file), format="wav")
 
 
 def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
@@ -381,8 +443,25 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
     with io.BytesIO() as f:
         for lang in languages:
             try:
+                lang_old = lang.split("-")[0]
+                if lang_old not in ["ta", "hi", "en"]:
+                    lang_old = "en"
                 train_name = format_map.get("train", {}).get("name", "Unknown Train").lower()
-                msg = text_msg[lang].replace("\n", " ").format_map({**format_map, "train": {**format_map.get("train", {}), "name": train_name}})
+                train_no = format_map.get("train", {}).get("no", "00000")
+                print(format_map)
+                print("Train no:", train_no, lang_old)
+                spelled_out_no = " ; ".join(number_map.get(str(d), {"en": d}).get(lang_old, d) for d in train_no if d in number_map)
+                print("Spelled out number:", spelled_out_no)
+                format_map_2 = {
+                    "train": {
+                        **format_map.get("train", {}),
+                        "no": spelled_out_no + "; ",
+                        "name": train_name,
+                    }
+                }
+
+                msg = text_msg[lang_old].replace("\n", " ").format_map(format_map_2)
+
                 # translated = translate(msg, lang, pytrans)
                 print(msg)
                 print(f"Generating for language: {lang}")
@@ -396,7 +475,7 @@ def announce(text_msg, format_map=None, languages=LANGUAGES, delta=500):
                 break
         f.seek(0)
         segment: pydub.AudioSegment = pydub.AudioSegment.from_file(f)
-        return speedup(segment, playback_speed=1.30)
+        return segment # speedup(segment, playback_speed=1.0)
 
 def translate(text_msg, language=None, translator: PyTranslator = None):
     translator = translator or PyTranslator()
@@ -448,19 +527,34 @@ def format_train_name(train_name: str):
         )
         ).strip()
 
+def choose_priority_time(train: dict, cur_time: datetime.datetime) -> datetime.datetime | None:
+    arr_time, dep_time = parse_arrdep_time(train, cur_time)
 
-async def main(station_name: str, std_code: str, time: datetime.datetime = None, captcha_resolver = None):
+    # if train hasn't arrived yet, prioritize arrival time
+    if arr_time and arr_time > cur_time:
+        return arr_time
+    # else, if train has arrived but hasn't departed yet, prioritize departure time
+    if dep_time and dep_time > cur_time:
+        return dep_time
+    
+    # else, return current time (train has already departed, or terminated here)
+    return cur_time
+    
+    
+
+
+async def main(station_name: str, stn_code: str, time: datetime.datetime = None, captcha_resolver = None):
     global station_map
     
     time = time or datetime.datetime.now()
     async with ETrainAPIAsync(captcha_resolver=captcha_resolver or async_default_captcha_resolver) as etrain:
-        trains = await etrain.get_live_station(std_code, station_name)
+        trains = await etrain.get_live_station(stn_code, station_name)
         announcements = []
         for train in trains:
             if not train["tt_pf"] or train["tt_pf"].startswith("-"):
                 print(train["tt_pf"])
                 continue
-            train_correct_number = " ; ".join(list(train["train_no"])) + " ;"
+            train_correct_number = list(train["train_no"])
             msg, priority = choose_msg(train, cur_time=time)
             arr_time, dep_time = parse_arrdep_time(train, time)
             if not msg:
@@ -488,20 +582,44 @@ async def main(station_name: str, std_code: str, time: datetime.datetime = None,
                 station_map = json.loads(STATION_FILE.read_text())
                 station_map = {std_c: replace_abbvs(sta["name"]) for std_c, sta in station_map.items()}
 
+                via_stns = via_stations(schedule, stn_code)
+                print("Via stations codes:", via_stns)
+                via_stns = [
+                    replace_abbvs(station_map.get(code, code), station_abbvs).strip().lower()
+                    for code in via_stns
+                ]
+                print("Via stations:", via_stns)
+                train_info["train"]["via"] = "; ".join(via_stns)
+
             print("Generating announcement...")
             print(msg)
-            intro = INTROS[0]
+            intro = INTROS[4] + 9 # Increase volume by 2 dB
 
             announcement = await asyncio.get_event_loop().run_in_executor(None, announce, msg, train_info)
             silent = pydub.AudioSegment.silent(duration=500)
             ann_file = (
-                ANNOUNCEMENTS_PATH / f"{train['train_name'].replace(' ', '_')}.wav"
+                ANNOUNCEMENTS_PATH / f"{train['train_no']}_{train['train_name'].replace(' ', '_')}.mp3"
             )
-            (intro + silent + (announcement + 3)).export(str(ann_file), format="wav")
+            (intro + silent + (announcement + 3)).export(str(ann_file), format="mp3")
             announcements.append(ann_file)
             # if dep_time is not available, then send the arrival time
-            yield [ann_file, dep_time or arr_time, priority]
-        
+            # prioritize arrivals otherwise departures
+
+            priority_time = choose_priority_time(train, time)
+            yield [ann_file, priority_time, priority]
+
+def via_stations(schedule: list, curr: str, n_via = 5) -> list[str]:
+    schedule_codes = [sta["code"] for sta in schedule]
+    schedule_distances = {sta["code"]: sta.get("dist", 0) for sta in schedule}
+    print(schedule_distances)
+    curr_idx = schedule_codes.index(curr)
+
+    forward = schedule_codes[curr_idx+1:-1]
+    forward = heapq.nsmallest(n_via, forward, key=lambda c: nsg_data.get(c, 99999))
+
+    forward.sort(key=lambda c: int(schedule_distances.get(c, 0)))
+
+    return forward
 
 
 def welcome_f(stn_name: str):

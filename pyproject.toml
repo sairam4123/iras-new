@@ -23,6 +23,10 @@ dependencies = [
     "climage>=0.2.2,<0.3",
     "audioop-lts>=0.2.1,<0.3 ; python_version >= '3.13'",
     "yapper-tts>=0.7.1",
+    "google-cloud-texttospeech>=2.31.0",
+    "pypdf>=6.1.1",
+    "pdfplumber>=0.11.7",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
