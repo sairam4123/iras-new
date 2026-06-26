@@ -1,5 +1,5 @@
 import base64
-from io import BytesIO
+from io import BufferedRandom, BufferedWriter, BytesIO
 import json
 import os
 import random
@@ -28,7 +28,7 @@ def get_speech_client() -> tts.TextToSpeechClient:
     return tts_client
 
 
-VOICE_MODEL = "Standard"
+VOICE_MODEL = "Wavenet"  # Standard, Wavenet, Chirp3
 
 
 def select_voice_people(lang: str) -> dict[str, tts.Voice]:
@@ -93,7 +93,7 @@ def select_voice_people(lang: str) -> dict[str, tts.Voice]:
     return voices
 
 
-def t2s(text: str, out_fp: BytesIO, lang: str = "en-IN"):
+def t2s(text: str, out_fp: BytesIO | BufferedRandom, lang: str = "en-IN"):
     speech_client = get_speech_client()
     voices = select_voice_people(lang)
     voice = voices["announcer"]

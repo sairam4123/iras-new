@@ -8,12 +8,24 @@ from aioconsole import aprint, ainput
 from pydub import AudioSegment
 from pydub.playback import play
 
-from player import main as player_main
+from player import main as player_main, coach_pos_main, TYPES
 
 station_name = "Tambaram"
 station_code = "TBM"
 
 STATIONS_FILE = "stations.json"
+
+PRIORITY_MAP = {
+    TYPES["arrival_on"]: 1,
+    TYPES["arrival_on_middle"]: 1,
+    TYPES["departure_ready"]: 2,
+    TYPES["on_platform"]: 3,
+    TYPES["arrival_shortly"]: 4,
+    TYPES["arrival_shortly_middle"]: 4,
+    TYPES["arrival"]: 5,
+    TYPES["arrival_middle"]: 5,
+    TYPES["departure"]: 6,
+}
 
 
 def fetch_station_name(station_code: str) -> str:
@@ -45,17 +57,23 @@ async def async_console_captcha_resolver(
 async def fetch_announcements():
     while True:
         print("Fetching announcements")
-        async for ann_file, dept_time, priority, ann_type, train_no in player_main(
+        async for ann_file, dept_time, ann_type, train_info in player_main(
             station_name, station_code, captcha_resolver=async_console_captcha_resolver
         ):
             current_time = datetime.datetime.now()
+            train_no = train_info["train"]["no"]
             await aprint(
-                f"Priority: {priority}, Dept Time: {dept_time}, Announcement: {ann_file}, Type: {ann_type}, Train No: {train_no}"
+                f"Dept Time: {dept_time}, Announcement: {ann_file}, Type: {ann_type}, Train No: {train_no}"
             )
+            priority = PRIORITY_MAP.get(ann_type, 5)  # default priority is 5
             last_played_time, last_ann_type = last_played.get(train_no, (None, None))
             if last_ann_type is not None and last_played_time is not None:
                 priority = wait_time_priority(priority, current_time, last_played_time)
-            if priority == 2 or priority == 1:
+            if (
+                ann_type == TYPES["arrival_on"]
+                or ann_type == TYPES["arrival_on_middle"]
+                or ann_type == TYPES["departure_ready"]
+            ):
                 # add 3 times to the queue
                 heapq.heappush(
                     ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
@@ -69,6 +87,22 @@ async def fetch_announcements():
             else:
                 heapq.heappush(
                     ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
+                )
+            if (
+                ann_type == TYPES["arrival"] or ann_type == TYPES["departure"]
+            ):  # coach position announcements
+                coach_pos_announcement = await coach_pos_main(
+                    train_no, train_info["train"]["name"]
+                )
+                heapq.heappush(
+                    ANNOUNCEMENTS,
+                    (
+                        priority,
+                        dept_time,
+                        coach_pos_announcement,
+                        4,
+                        f"{train_no}_coach_pos",
+                    ),
                 )
 
         await asyncio.sleep(TIME_BETWEEN_ANN_SEC)
