@@ -64,8 +64,8 @@ texts = {
         "platform_from": "பிளாட்பாரத்திலிருந்து",
         "hour_marker": "மணி",
         "minute_marker": "நிமிடத்திற்கு",
-        "arriving_shortly": "இன்னும் சிறிது நேரத்தில் வந்து சேரும்.",
-        "expected_departure": "புறப்படும்.",
+        "arriving_shortly": "இன்னும் சிறிது நேரத்தில் வந்து சேரும்.", # replace these with "-il innum"
+        "expected_departure": "புறப்படும்.", # replace these with "-ilirundhu"
         "ready_departure": "புறப்பட தயாராக உள்ளது.",
         "arriving_on": "வந்து கொண்டிருக்கிறது.",
         "expected_arrival": "வந்து சேரும் என எதிர்பார்க்கப்படுகிறது.",
