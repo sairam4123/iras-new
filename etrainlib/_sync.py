@@ -23,10 +23,12 @@ from etrainlib.parser import ETrainParser
 __all__ = ["ETrainAPISync"]
 
 
-
-
 class ETrainAPISync:
-    def __init__(self, phpcookie=None, captcha_handler: Callable[[str, list[str], str, str], str] = None):
+    def __init__(
+        self,
+        phpcookie=None,
+        captcha_handler: Callable[[str, list[str], str, str], str] = None,
+    ):
         self.req_id = 0
         self.req_count = {}
         if AUTH_CACHE.exists():
@@ -61,7 +63,7 @@ class ETrainAPISync:
             if "error" in json:
                 raise ETrainAPIError(json["error"])
         return json
-    
+
     def _update_cookie(self, _curr_cookie: str):
         if _curr_cookie == self._phpcookie:
             return False
@@ -88,7 +90,9 @@ class ETrainAPISync:
 
         captcha_soup = BeautifulSoup(code, "html.parser")
         image = captcha_soup.find("img", attrs={"class": "captchaimage"})
-        error = captcha_soup.find("span", attrs={"id": "captchaformerrormsg"}).get_text()
+        error = captcha_soup.find(
+            "span", attrs={"id": "captchaformerrormsg"}
+        ).get_text()
 
         res = self.session.get(BASE_URL + image.attrs["src"])
 
@@ -101,7 +105,9 @@ class ETrainAPISync:
         (CAPTCHA_FOLDER / cache_file).write_bytes(res.content)
         captcha_btns = captcha_soup.find_all("a", attrs={"class": "capblock"})
         keys = [captcha.get_text() for captcha in captcha_btns]
-        key = self.captcha_handler(encoded_hash, keys, error, str(CAPTCHA_FOLDER / cache_file))
+        key = self.captcha_handler(
+            encoded_hash, keys, error, str(CAPTCHA_FOLDER / cache_file)
+        )
         try:
             index = keys.index(key)
         except IndexError:
@@ -142,7 +148,6 @@ class ETrainAPISync:
             page, query={"q": "page"}, form_data={"page": page}
         )  # Request page
         return self.parser._parse_coach_position(json_resp)
-
 
     def get_running_status(
         self, train_no: str, train_name: str, date: datetime.date, src_stn_code: str

@@ -4,7 +4,12 @@ from pathlib import Path
 import bs4
 import parsedatetime
 
-from etrainlib.constants import CACHE_FOLDER, ETrainAllTrainsConfig, ETrainArrivalDepartureConfig
+from etrainlib.constants import (
+    CACHE_FOLDER,
+    ETrainAllTrainsConfig,
+    ETrainArrivalDepartureConfig,
+)
+
 
 def parse_schedule(dt):
     day = dt.split(" ")[2].strip(")")
@@ -102,7 +107,10 @@ class ETrainParser:
     @staticmethod
     def _parse_train_schedule_info(json_resp):
         train_soup = bs4.BeautifulSoup(json_resp["data"]["ldata"], "html.parser")
-        table_rows = train_soup.find(id="sublowerdata").find("table").find_all("tr")
+        sublowerdata = train_soup.find(id="sublowerdata")
+        if not sublowerdata:
+            return []
+        table_rows = sublowerdata.find("table").find_all("tr")
 
         stations = []
         for table_row in table_rows[1:]:
@@ -138,16 +146,21 @@ class ETrainParser:
         positions = {}
         for table_row in table_rows[1:]:
             table_row: bs4.PageElement
-            coach_pos = table_row.find_parent().get_text(" ; ").split(" ; ")
+            parent = table_row.find_parent()
+            if not parent or not parent.get_text():
+                continue
+            coach_pos = parent.get_text(" ; ").split(" ; ")
             positions[coach_pos[0]] = coach_pos[1]
         return positions
-    
+
     @staticmethod
     def _parse_running_status_data(json_resp):
         train_soup = bs4.BeautifulSoup(json_resp["data"], "html.parser")
+        sublowerdata = train_soup.find(id="sublowerdata")
+        if not sublowerdata:
+            return []
         table_rows = (
-            train_soup.find(id="sublowerdata")
-            .find("table")
+            sublowerdata.find("table")
             .find_next_sibling("table")
             .find_all("tr", attrs={"class": ["odd", "even"]})
         )
@@ -175,15 +188,16 @@ class ETrainParser:
             }
             stns.append(stn)
         return stns
-    
+
     @staticmethod
     def _parse_all_trains_data(json_resp, config: ETrainAllTrainsConfig):
         soup = bs4.BeautifulSoup(json_resp["data"]["udata"], "html.parser")
         parsed_trains = []
-        trows = soup.find(attrs={"class": "trainlist"}).find_all("tr")
+        trainlist = soup.find(attrs={"class": "trainlist"})
+        trows = trainlist.find_all("tr") if trainlist else []
         for table_row in trows:
             table_row: bs4.PageElement
-            
+
             if len(parsed_trains) >= config.limit:
                 break
 
@@ -202,6 +216,6 @@ class ETrainParser:
             if config.weekday != -1:
                 if train_info["running_days"][config.weekday] == "X":
                     continue
-            
+
             parsed_trains.append(train_info)
         return parsed_trains
