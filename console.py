@@ -5,9 +5,9 @@ import json
 
 import climage
 from aioconsole import aprint, ainput
+import simpleaudio as sa
 from pydub import AudioSegment
-from pydub.playback import play
-
+from pydub.playback import _play_with_simpleaudio as play
 from player import main as player_main, coach_pos_main, TYPES
 
 station_name = "Tambaram"
@@ -27,6 +27,18 @@ PRIORITY_MAP = {
     TYPES["departure"]: 6,
 }
 
+REPEAT_MAP = {
+    TYPES["arrival_on"]: 3,
+    TYPES["arrival_on_middle"]: 3,
+    TYPES["departure_ready"]: 3,
+    TYPES["on_platform"]: 3,
+    TYPES["arrival_shortly"]: 2,
+    TYPES["arrival_shortly_middle"]: 2,
+    TYPES["arrival"]: 2,
+    TYPES["arrival_middle"]: 2,
+    TYPES["departure"]: 2,
+}
+
 
 def fetch_station_name(station_code: str) -> str:
     station_code = station_code.upper()
@@ -36,7 +48,7 @@ def fetch_station_name(station_code: str) -> str:
 
 ANNOUNCEMENTS = []
 
-last_played = {}  # {ann_file: (last_played_time, ann_type)}
+last_played = {}  # {ann_file: (last_played_time, ann_type, times_played)}
 
 TIME_BETWEEN_ANN_SEC = 70  # 1 minute 10 seconds or 70 seconds
 
@@ -66,27 +78,21 @@ async def fetch_announcements():
                 f"Dept Time: {dept_time}, Announcement: {ann_file}, Type: {ann_type}, Train No: {train_no}"
             )
             priority = PRIORITY_MAP.get(ann_type, 5)  # default priority is 5
-            last_played_time, last_ann_type = last_played.get(train_no, (None, None))
+            last_played_time, last_ann_type, times_played = last_played.get(
+                train_no, (None, None, 0)
+            )
             if last_ann_type is not None and last_played_time is not None:
                 priority = wait_time_priority(priority, current_time, last_played_time)
-            if (
-                ann_type == TYPES["arrival_on"]
-                or ann_type == TYPES["arrival_on_middle"]
-                or ann_type == TYPES["departure_ready"]
-            ):
-                # add 3 times to the queue
+            for _ in range(REPEAT_MAP.get(ann_type, 2)):  # default repeat is 2
                 heapq.heappush(
-                    ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
-                )
-                heapq.heappush(
-                    ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
-                )
-                heapq.heappush(
-                    ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
-                )
-            else:
-                heapq.heappush(
-                    ANNOUNCEMENTS, (priority, dept_time, ann_file, ann_type, train_no)
+                    ANNOUNCEMENTS,
+                    (
+                        priority,
+                        dept_time,
+                        ann_file,
+                        ann_type,
+                        train_no,
+                    ),
                 )
             if (
                 ann_type == TYPES["arrival"] or ann_type == TYPES["departure"]
@@ -140,17 +146,45 @@ async def play_announcements():
             await aprint(
                 f"Now Playing: Priority: {priority}, Dept Time: {dept_time}, Announcement: {ann_file}, Type: {ann_type}, Train No: {train_no}"
             )
+            await aprint(f"Announcement Queue Length: {len(ANNOUNCEMENTS)}")
 
             current_time = datetime.datetime.now()
             if dept_time is None:
                 dept_time = current_time
 
+            if (
+                dept_time - current_time
+            ).total_seconds() < -60:  # announcement is more than 1 min late
+                print(
+                    f"Announcement time is in the past, skipping. {dept_time} < {current_time} - {(dept_time - current_time).seconds:.2f} seconds; {ann_file}"
+                )
+                continue
+
             # Ignore the announcement if it's already played for the specific train in the last 5 mins but only for the same type of announcement. For example, if an arrival announcement is played, then ignore any subsequent arrival announcements for the same train for the next 5 mins, but allow departure announcements for the same train.
-            last_played_time, last_ann_type = last_played.get(train_no, (None, None))
+            last_played_time, last_ann_type, times_played = last_played.get(
+                train_no, (None, None, 0)
+            )
+            max_play_times = REPEAT_MAP.get(ann_type, 2)  # default max play times is 2
+            if times_played >= max_play_times:
+                if (
+                    last_played_time is not None
+                    and (current_time - last_played_time).total_seconds() < 4 * 60
+                    and (last_ann_type == ann_type)
+                ):
+                    print(
+                        f"Skipping announcement {ann_file} as it has already been played {times_played} times (max allowed: {max_play_times})"
+                    )
+                    continue
+                last_played[train_no] = (
+                    current_time,
+                    ann_type,
+                    0,
+                )  # reset times played for this train and announcement type
             if (
                 last_ann_type is not None
                 and last_played_time is not None
                 and (last_ann_type in [5] or ann_type in [5])
+                and (times_played >= max_play_times)
             ):
                 if (
                     current_time - last_played_time
@@ -164,6 +198,7 @@ async def play_announcements():
                     last_ann_type is not None
                     and last_played_time is not None
                     and (current_time - last_played_time).total_seconds() < 150
+                    and (times_played >= max_play_times)
                 ):  # 2.5 minutes = 150 seconds
                     print(
                         f"Skipping announcement {ann_file} as it was played recently (critical announcement - {(current_time - last_played_time).total_seconds()} seconds < 150)"
@@ -173,6 +208,7 @@ async def play_announcements():
             if (
                 last_played_time
                 and (current_time - last_played_time).total_seconds() < 240
+                and (times_played >= max_play_times)
             ):  # 4 minutes = 4*60 seconds
                 if last_ann_type == ann_type:
                     print(
@@ -181,29 +217,42 @@ async def play_announcements():
                     continue
                 # but if the announcement type is (arriving on, on platform, departure ready), do not ignore those announcements but set it to every 2-3 mins instead of 5 mins, as those are more critical announcements.
 
-            last_played[train_no] = (current_time, ann_type)
-
-            if dept_time < current_time:
+            if times_played >= max_play_times:
                 print(
-                    f"Announcement time is in the past, skipping. {dept_time} < {current_time} - {(dept_time - current_time).seconds:.2f} seconds; {ann_file}"
+                    f"Skipping announcement {ann_file} as it has already been played {times_played} times (max allowed: {max_play_times}) and is on cooldown."
                 )
-                continue
+                continue  # skip if already played max times
+            else:
+                last_played[train_no] = (current_time, ann_type, times_played + 1)
+
             ann_seg: AudioSegment = AudioSegment.from_file(ann_file)
-
-            task = None
+            print(
+                f"Playing announcement: {ann_file} - {len(ann_seg) / 1000:.2f} seconds long"
+            )
+            playback = None
             try:
-                task = asyncio.get_event_loop().run_in_executor(None, play, ann_seg)
-
-                while True:
+                playback = play(ann_seg)
+                i = 0
+                while playback.is_playing():
                     await asyncio.sleep(0.5)
-                    if task.done():
-                        break
+                    i += 0.5
+                    if i % 2 == 0:  # Print every 1 second (0.5 * 2)
+                        print(
+                            f"Announcement {ann_file} is playing {i}/{len(ann_seg) / 1000:.2f}..."
+                        )
+                else:
+                    print("Exited playback loop, announcement finished playing.")
+                print(f"Calling wait_done() for announcement {ann_file}...")
+                playback.wait_done()
+                print(f"Announcement {ann_file} finished playing.")
 
             except KeyboardInterrupt:
-                if task:
-                    task.cancel()
                 print("Playback interrupted")
+                if playback:
+                    playback.stop()
                 break
+            except Exception as e:
+                print(f"Error playing announcement {ann_file}: {e}")
 
         else:
             await asyncio.sleep(1)

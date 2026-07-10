@@ -1,8 +1,12 @@
+import asyncio
 import hashlib
-from typing import Any, cast
+import time
+from typing import Any
 from pydub.silence import detect_leading_silence
 
+from concurrent.futures import ThreadPoolExecutor
 import pydub
+
 
 import pathlib
 
@@ -59,17 +63,17 @@ texts = {
         "via": "வழியாக",
         "train": "இரயில்",
         "ordinal_suffix": "-ஆவது",
-        "platform_on": "பிளாட்பாரத்தில்",
-        "platform_to": "பிளாட்பாரத்திற்கு",
-        "platform_from": "பிளாட்பாரத்திலிருந்து",
+        "platform_on": "பிளாட்பாரம் நம்பர்",
+        "platform_to": "பிளாட்பாரம் நம்பர்",
+        "platform_from": "பிளாட்பாரம் நம்பர்",
         "hour_marker": "மணி",
         "minute_marker": "நிமிடத்திற்கு",
-        "arriving_shortly": "இன்னும் சிறிது நேரத்தில் வந்து சேரும்.", # replace these with "-il innum"
-        "expected_departure": "புறப்படும்.", # replace these with "-ilirundhu"
-        "ready_departure": "புறப்பட தயாராக உள்ளது.",
-        "arriving_on": "வந்து கொண்டிருக்கிறது.",
-        "expected_arrival": "வந்து சேரும் என எதிர்பார்க்கப்படுகிறது.",
-        "standing_on": "உள்ளது.",
+        "arriving_shortly": "-இல் இன்னும் சிறிது நேரத்தில் வந்து சேரும்.",  # replace these with "-il innum"
+        "expected_departure": "-லிருந்து புறப்படும்.",  # replace these with "-ilirundhu"
+        "ready_departure": "-லிருந்து புறப்பட தயாராக உள்ளது.",
+        "arriving_on": "-இல் வந்து கொண்டிருக்கிறது.",
+        "expected_arrival": "-இல் வந்து சேரும் என எதிர்பார்க்கப்படுகிறது.",
+        "standing_on": "-இல் உள்ளது.",
         "deep_regret": "உங்களக்கு ஏற்பட்ட சிரமத்திற்கு நாங்கள் வருந்துகிறோம்.",
         "pls_contact_authorities": "தயவுசெய்து அதிகாரிகளுடன் தொடர்பு கொள்ளவும்.",
         "no_information": "பற்றிய தகவல்கள் இந்த நேரத்தில் கிடைக்கவில்லை.",
@@ -180,13 +184,36 @@ num_map_digits = {
 }
 
 
-def load_cached_ann(lang: str):
-    cache_fp = CACHE_FPS.get(lang)
-    if not cache_fp:
-        raise ValueError(f"Invalid language: {lang}")
-    for ann_fp in cache_fp.glob("*.mp3"):
-        key = ann_fp.stem
-        CACHE[lang][key] = pydub.AudioSegment.from_file(ann_fp, format="mp3")
+def load_single_file(task):
+    """Worker function that handles exactly one MP3 file."""
+    lang, ann_fp = task
+    key = ann_fp.stem
+
+    # Each file loads independently and safely saves to its spot
+    CACHE[lang][key] = pydub.AudioSegment.from_file(ann_fp, format="mp3")
+
+
+def build_cache():
+    # Gather all files across all languages into a single list of tasks
+    all_tasks = []
+    for lang in LANGS:
+        cache_fp = CACHE_FPS.get(lang)
+        if not cache_fp:
+            continue
+        for ann_fp in cache_fp.glob("*.mp3"):
+            all_tasks.append((lang, ann_fp))
+
+    print(f"Found {len(all_tasks)} total files across all languages.")
+    print("Loading and building cache...")
+    ts = time.time()
+    # Process all files concurrently
+    # Setting max_workers=None defaults to a smart number based on your CPU cores
+    with ThreadPoolExecutor(max_workers=None) as executor:
+        # This maps the flat list of individual tasks to the worker function
+        executor.map(load_single_file, all_tasks)
+
+    te = time.time()
+    print(f"Cache building completely finished! Time taken: {te - ts:.2f} seconds")
 
 
 def generate_audio_for_hint(ann_hint: str, key: str, lang: str) -> pydub.AudioSegment:
@@ -210,9 +237,7 @@ def generate_audio_for_hint(ann_hint: str, key: str, lang: str) -> pydub.AudioSe
         return segment
 
 
-async def stitch_announcement(
-    ann_hints: list[str], lang: str
-) -> pydub.AudioSegment | None:
+def stitch_announcement(ann_hints: list[str], lang: str) -> pydub.AudioSegment | None:
     announcement: pydub.AudioSegment = pydub.AudioSegment.empty()
     for ann_hint in ann_hints:
         segment = pydub.AudioSegment.empty()
@@ -342,8 +367,7 @@ async def create_announcement_sound(
     ann_hints: list[str], train: dict[str, Any], lang: str
 ) -> pydub.AudioSegment | None:
     ann_hints = fill_train_details(ann_hints, train)
-    load_cached_ann(lang)
-    announcement = await stitch_announcement(ann_hints, lang)
+    announcement = await asyncio.to_thread(stitch_announcement, ann_hints, lang)
     return announcement
 
 

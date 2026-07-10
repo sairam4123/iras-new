@@ -501,6 +501,7 @@ dependencies = [
     { name = "pydub" },
     { name = "pypdf" },
     { name = "python-dateutil" },
+    { name = "simpleaudio-patched" },
     { name = "speechrecognition" },
     { name = "tqdm" },
     { name = "vosk" },
@@ -531,6 +532,7 @@ requires-dist = [
     { name = "pydub", specifier = ">=0.25.1,<0.26" },
     { name = "pypdf", specifier = ">=6.1.1" },
     { name = "python-dateutil", specifier = ">=2.8.2,<3" },
+    { name = "simpleaudio-patched", specifier = ">=1.0.5" },
     { name = "speechrecognition", specifier = ">=3.10.0,<4" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "vosk", specifier = ">=0.3.44,<0.4" },
@@ -3315,6 +3317,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/5c/01/771ea46cce201dd42
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/65/3f0dba35760d902849d39d38c0a72767794b1963227b69a587f8a336d08c/setuptools-75.3.2-py3-none-any.whl", hash = "sha256:90ab613b6583fc02d5369cbca13ea26ea0e182d1df2d943ee9cbe81d4c61add9", size = 1251198, upload-time = "2025-03-12T00:02:17.554Z" },
 ]
+
+[[package]]
+name = "simpleaudio-patched"
+version = "1.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/dd/c077921fd728e73ddc44aa265602a9371385b9f82f130a4e9324b44b9dbd/simpleaudio_patched-1.0.5.tar.gz", hash = "sha256:f34d8ec7fb175fc054d84b1642ea8ecaa4f49a0d0661d98850ec400dcfdfb004", size = 2044621, upload-time = "2024-05-27T13:49:24.748Z" }
 
 [[package]]
 name = "six"
