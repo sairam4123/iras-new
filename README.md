@@ -4,9 +4,7 @@ This project is the successor to the [Indian\_Railways\_Announcement\_System](ht
 
 ## Features
 
-- Two modes of operation:
-  - **Discord Bot**: Plays railway-style announcements in Discord servers.
-  - **Console App**: A standalone application for announcements.
+- **Console App**: A standalone application that plays railway-style, multi-language train announcements through local speakers.
 
 
 ## History
@@ -15,58 +13,42 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
 
 ## Dependencies
 1. FFMpeg (Download from https://www.ffmpeg.org/)
-2. eSpeak-NG
-   - This dependency is only needed if you're going to run Discord App. (Not recommended)
-3. Discord Bot Token:
-   - This dependency is only needed if you're going to run Discord App. (Not recommended)
+2. A Google Cloud Text-to-Speech service account
+   - Announcement audio is synthesized with Google Cloud TTS (see `speaker.py`). Place your service account key at `gen-lang-client.json` in the project root, or provide it base64-encoded via the `GEN_LANG_JSON_KEY` environment variable.
 
 ## Running the Project
 
 1. **Install Dependencies**:
 
-   - Use [Poetry](https://python-poetry.org/) to manage dependencies:
+   - This project uses [uv](https://docs.astral.sh/uv/) to manage dependencies:
      ```bash
-     poetry install
+     uv sync
      ```
-     If Poetry is not installed, it can be added via pip:
-     ```bash
-     pip install poetry
-     ```
+     If uv is not installed, see the [installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-2. **Activate the virtual environment**:
-    - Use `poetry env activate` to activate the virtual environment. If a venv doesn't exist, then Poetry will create one for you.
+2. **Start the Project**:
 
-3. **Start the Project**:
-
-   - For the Console App:
-     ```bash
-     python console.py
-     ```
-   - For the Discord Bot:
-     ```bash
-     python main.py
-     ```
+   ```bash
+   uv run console.py
+   ```
 
 ---
 
 ## Architecture
 
-- **`main.py`**: Implements a priority-based announcements player for the Discord Bot.
-- **`console.py`**: Implements a priority-based announcements player for standalone use.
+- **`console.py`**: Standalone entry point; polls live train data on a loop and plays announcements through local speakers, applying per-announcement-type priority, repeat, cooldown, and burst-cooldown rules.
+- **`player.py`**: Shared core logic — fetches live train arrivals/departures via `etrainlib`, classifies them into announcement `TYPES` (arrival, arrival shortly, on platform, departure, etc.), builds announcement text from `templates.py`, and hands it off to `vox.py` for audio generation.
+- **`vox.py`**: Builds and caches announcement audio. Synthesizes and caches individual phrases per language via `speaker.py`, assembles full announcements from `templates.py`, and prefixes them with a station chime.
+- **`templates.py`**: Per-language (English, Tamil, Hindi) phrase templates used to compose each announcement type.
+- **`speaker.py`**: Wraps the Google Cloud Text-to-Speech API to synthesize announcement phrases.
+- **`dataset_parser.py`**: One-off utility that extracts NSG station-classification tables from RDSO PDFs (`dataset/station/`) into JSON.
 
 ### Custom Libraries
 
-Two custom libraries are included for specialized functionality:
-
-1. **`espeak_ng`**:
-
-   - Wraps the `espeak_ng` executable for text-to-speech functionality.
-   - Requires the `espeak_ng` executable to be in the system path.
-
-2. **`etrainlib`**:
+- **`etrainlib`**:
 
    - Scrapes data from [etrain.info](https://etrain.info) using BeautifulSoup.
-   - Provides APIs for simplified data access.
+   - Provides both sync (`_sync.py`) and async (`_async.py`) APIs for simplified data access.
 
 
 ## Implementation
@@ -94,17 +76,16 @@ Two custom libraries are included for specialized functionality:
 
    - Announcements are managed using a priority queue.
    - High-priority events (e.g., "Train is arriving" or "Train is on platform") are announced before lower-priority events (e.g., "Scheduled to depart").
+   - Each announcement type has a cooldown and burst-cooldown, preventing the same event from being repeated too frequently while still allowing rapid updates when a train's status changes.
 
 4. **Audio Generation**:
 
-   - Google Text-to-Speech (GTTS) converts announcement text into audio in three languages.
+   - Google Cloud Text-to-Speech converts announcement phrases into audio in three languages (English, Tamil, Hindi); synthesized phrases are cached on disk and reused across announcements.
    - A signature chime ("ting ting") is added to the beginning of all announcements.
 
 5. **Audio Playback**:
 
-   - Final audio files are queued and played:
-     - Via speakers for the Console App.
-     - On Discord servers for the Discord Bot.
+   - Final audio files are queued and played through local speakers.
 
 
 ## Future Improvements
@@ -113,7 +94,6 @@ Two custom libraries are included for specialized functionality:
 - Enhanced polling mechanism for optimized API calls based on train proximity.
 - Improved batching of announcements to minimize redundancy.
 - Support for late arriving trains.
-- Platform-based announcements playback (partially implemented).
 - Operator takeover functionality to allow manual control of announcements.
 - Advanced error handling for network issues or incomplete data.
 - Multi-station management for more complex scenarios.
