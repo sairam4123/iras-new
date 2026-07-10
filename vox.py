@@ -6,7 +6,7 @@ from pydub.silence import detect_leading_silence
 
 from concurrent.futures import ThreadPoolExecutor
 import pydub
-
+from pydub.effects import speedup
 
 import pathlib
 
@@ -193,7 +193,56 @@ def load_single_file(task):
     CACHE[lang][key] = pydub.AudioSegment.from_file(ann_fp, format="mp3")
 
 
+def load_cached_ann(lang: str, ann_hint: str):
+    match = ANN_HINT_REGEX.match(ann_hint)
+    if not match:
+        raise ValueError(f"Invalid announcement hint: {ann_hint}")
+    key, *_ = match.groups()
+    cache_name = lang
+    if cache_name not in CACHE:
+        raise ValueError(f"Invalid cache name: {cache_name}")
+    if key not in CACHE[cache_name]:
+        cache_fp = CACHE_FPS.get(lang)
+        if not cache_fp:
+            raise ValueError(f"No cache folder found for language: {lang}")
+        ann_fp = cache_fp / f"{key}.mp3"
+        if not ann_fp.exists():
+            raise ValueError(
+                f"No cached audio found for key: {key} in cache: {cache_name}"
+            )
+        CACHE[cache_name][key] = pydub.AudioSegment.from_file(ann_fp, format="mp3")
+
+
+def build_cache_texts():
+    all_tasks = []
+    for lang in LANGS:
+        for key, _ in texts[lang].items():
+            ann_fp = CACHE_FPS[lang] / f"{key}.mp3"
+            if not ann_fp.exists():
+                continue  # Skip if the file doesn't exist
+            all_tasks.append((lang, key))
+        for key, _ in number_map.items():
+            ann_fp = CACHE_FPS[lang] / f"{key}.mp3"
+            if not ann_fp.exists():
+                continue  # Skip if the file doesn't exist
+            all_tasks.append((lang, key))
+
+    print(f"Found {len(all_tasks)} total cached texts across all languages.")
+    print("Loading and building cache for ONLY texts...")
+    ts = time.time()
+    with ThreadPoolExecutor(max_workers=None) as executor:
+        executor.map(load_cached_ann, all_tasks)
+    te = time.time()
+    print(
+        f"Cache texts building completely finished! Time taken: {te - ts:.2f} seconds"
+    )
+
+
 def build_cache():
+    build_cache_texts()
+
+
+def build_cache_all():
     # Gather all files across all languages into a single list of tasks
     all_tasks = []
     for lang in LANGS:
@@ -260,8 +309,29 @@ def stitch_announcement(ann_hints: list[str], lang: str) -> pydub.AudioSegment |
                     )
                 if not text:
                     raise ValueError(f"Invalid key: {key} for cache: {cache_name}")
-                segment = generate_audio_for_hint(text, key, cache_name)
-                CACHE[cache_name][key] = segment
+                # before generating the audio, check if the file already exists in the cache folder
+                cache_fp = CACHE_FPS.get(cache_name)
+                if not cache_fp:
+                    raise ValueError(
+                        f"No cache folder found for language: {cache_name}"
+                    )
+                ann_fp = cache_fp / f"{key}.mp3"
+                if ann_fp.exists():
+                    print(
+                        f"Found existing cached audio file for {key} in {cache_name}, loading..."
+                    )
+                    try:
+                        segment = pydub.AudioSegment.from_file(ann_fp, format="mp3")
+                        CACHE[cache_name][key] = segment
+                    except Exception as e:
+                        print(
+                            f"Error loading cached audio for {key} with key: {key}: {e}"
+                        )
+                        segment = generate_audio_for_hint(text, key, cache_name)
+                        CACHE[cache_name][key] = segment
+                else:
+                    segment = generate_audio_for_hint(text, key, cache_name)
+                    CACHE[cache_name][key] = segment
 
             else:
                 print(f"Fetching cached audio for {key}, in {cache_name}...")
@@ -273,8 +343,27 @@ def stitch_announcement(ann_hints: list[str], lang: str) -> pydub.AudioSegment |
 
             if key not in CACHE[lang]:
                 print(f"Generating audio for {ann_hint} with key: {key}...")
-                segment = generate_audio_for_hint(ann_hint, key, lang)
-                CACHE[lang][key] = segment
+                # before generating the audio, check if the file already exists in the cache folder
+                cache_fp = CACHE_FPS.get(lang)
+                if not cache_fp:
+                    raise ValueError(f"No cache folder found for language: {lang}")
+                ann_fp = cache_fp / f"{key}.mp3"
+                if ann_fp.exists():
+                    print(
+                        f"Found existing cached audio file for {ann_hint} with key: {key}, loading..."
+                    )
+                    try:
+                        segment = pydub.AudioSegment.from_file(ann_fp, format="mp3")
+                        CACHE[lang][key] = segment
+                    except Exception as e:
+                        print(
+                            f"Error loading cached audio for {ann_hint} with key: {key}: {e}"
+                        )
+                        segment = generate_audio_for_hint(ann_hint, key, lang)
+                        CACHE[lang][key] = segment
+                else:
+                    segment = generate_audio_for_hint(ann_hint, key, lang)
+                    CACHE[lang][key] = segment
             else:
                 print(f"Fetching cached audio for {ann_hint} with key: {key}...")
                 segment = CACHE[lang][key]
@@ -330,7 +419,7 @@ def stitch_announcement(ann_hints: list[str], lang: str) -> pydub.AudioSegment |
         / f"{hashlib.sha512(str(ann_hints).encode()).hexdigest()[:10]}_{lang}.mp3",
         format="mp3",
     )
-    return announcement
+    return speedup(announcement, 1.1)
 
 
 def fill_train_details(ann_hints: list[str], train: dict[str, Any]) -> list[str]:

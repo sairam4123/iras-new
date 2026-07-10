@@ -30,6 +30,7 @@ class ETrainAPIAsync:
         self,
         captcha_resolver: Callable[[str, list[str], str, str], Awaitable[str]],
         phpcookie=None,
+        debug: bool = False,
     ):
         self.req_id = 0
         self.req_count = {}
@@ -44,6 +45,7 @@ class ETrainAPIAsync:
         )
         self.captcha_handler = captcha_resolver
         self.parser = ETrainParser()
+        self.debug = debug
 
     def _get_request_info(self, query):
         return {"reqID": self.req_id, "reqCount": 1}
@@ -54,7 +56,8 @@ class ETrainAPIAsync:
     async def _request(self, path: str = "", query: dict = {}, form_data: dict = {}):
         query = query or {}
         form_data = form_data or {}
-        print("DEBUG: Requesting", path)
+        if self.debug:
+            print("DEBUG: Requesting", path)
         async with self.session.post(
             url=build_url(
                 BASE_API, path="ajax.php", query_dict=query | {"v": API_VERSION}
@@ -63,7 +66,8 @@ class ETrainAPIAsync:
             headers={"Referer": build_url(BASE_URL, path=path)},
         ) as res:
             res: Response
-            print("DEBUG: Response", res.status, res.url)
+            if self.debug:
+                print("DEBUG: Response", res.status, res.url)
             self._increment_request_info(query)
             try:
                 json: dict = await res.json(content_type="text/html")
@@ -91,7 +95,8 @@ class ETrainAPIAsync:
             self.session.cookie_jar.update_cookies(
                 cast(Mapping[str, Morsel[str]], {"PHPSESSID": self._phpcookie})
             )
-            print("DEBUG: Setting new session token and authenticating...")
+            if self.debug:
+                print("DEBUG: Setting new session token and authenticating...")
             return True
         return False
 
@@ -108,22 +113,23 @@ class ETrainAPIAsync:
 
         match = re.search(r"sD\s*=\s*'([^']+)'", code)
         if not match:
-            print(
-                "DEBUG: Invalid captcha data found, writing to invalid-captcha.html for debugging"
-            )
+            if self.debug:
+                print(
+                    "DEBUG: Invalid captcha data found, writing to invalid-captcha.html for debugging"
+                )
             (CACHE_FOLDER / "invalid-captcha.html").write_text(code)
             raise ETrainAPIError("invalid captchadata found", match)
         encoded_hash = match.group(1)
 
         if not match:
             print(
-                "DEBUG: Invalid captcha data found, writing to invalid-captcha.html for debugging"
+                "ERROR: Invalid captcha data found, writing to invalid-captcha.html for debugging"
             )
             (CACHE_FOLDER / "invalid-captcha.html").write_text(code)
             raise ETrainAPIError("invalid captchadata found", match)
         if not image:
             print(
-                "DEBUG: Invalid captcha image found, writing to invalid-captcha.html for debugging"
+                "ERROR: Invalid captcha image found, writing to invalid-captcha.html for debugging"
             )
             (CACHE_FOLDER / "invalid-captcha.html").write_text(code)
             raise ETrainAPIError("invalid captcha image found", image)

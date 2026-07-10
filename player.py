@@ -142,7 +142,7 @@ def split_time(time_str: str) -> tuple[str, str]:
     if ":" not in time_str:
         return time_str, ""
     hr, min_ = time_str.split(":")
-    return hr, min_
+    return hr.lstrip("0"), min_.lstrip("0")
 
 
 def choose_msg(train, cur_time: datetime.datetime) -> int | None:
@@ -181,7 +181,7 @@ def choose_msg(train, cur_time: datetime.datetime) -> int | None:
             msg_type = TYPES["arrival_on"]
         elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 10 * 60:
             msg_type = TYPES["arrival_shortly"]
-        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 20 * 60:
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 30 * 60:
             msg_type = TYPES["arrival"]
         print(
             arr_time,
@@ -199,7 +199,7 @@ def choose_msg(train, cur_time: datetime.datetime) -> int | None:
         elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 10 * 60:
             msg_type = TYPES["arrival_shortly_middle"]
             print("Generating arriving shortly message.")
-        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 20 * 60:
+        elif arr_time > cur_time and (arr_time - cur_time).total_seconds() < 30 * 60:
             msg_type = TYPES["arrival_middle"]
             print("Generating arrival message")
 
@@ -434,9 +434,7 @@ async def create_announcement_for(
     final_segment = pydub.AudioSegment.silent(duration=0)
     for segment in segments:
         if not segment:
-            print(
-                f"Failed to create announcement sound for type {ann_type} in language {lang}. Skipping."
-            )
+            print("Skipping empty segment.")
             continue
         final_segment += segment + pydub.AudioSegment.silent(duration=delta)
 
@@ -569,16 +567,16 @@ def build_train_metadata(train, arr_time, dep_time):
             }
             | (
                 {
-                    "arr_hr": arr_time.strftime("%H"),
-                    "arr_min": arr_time.strftime("%M"),
+                    "arr_hr": str(arr_time.strftime("%H")).removeprefix("0"),
+                    "arr_min": str(arr_time.strftime("%M")).removeprefix("0"),
                 }
                 if arr_time
                 else {}
             )
             | (
                 {
-                    "dept_hr": dep_time.strftime("%H"),
-                    "dept_min": dep_time.strftime("%M"),
+                    "dept_hr": str(dep_time.strftime("%H")).removeprefix("0"),
+                    "dept_min": str(dep_time.strftime("%M")).removeprefix("0"),
                 }
                 if dep_time
                 else {}
