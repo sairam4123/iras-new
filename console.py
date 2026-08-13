@@ -294,10 +294,15 @@ async def main():
             {code for code in stations}
         )
 
-    station_name_code = {station["name"]: code for code, station in stations.items()}
+    station_name_code = {
+        station["name"]: code for code, station in stations.items()
+    } | {code: code for code in stations}
     autocomplete_station_name = autocomplete(autocomplete_prompt, options)
-    station_name = autocomplete_station_name
-    station_code = station_name_code.get(station_name, station_name)
+    # if it's code, then fetch the name, if it's name, then fetch the code
+    station_code = station_name_code.get(
+        autocomplete_station_name, autocomplete_station_name
+    )
+    station_name = fetch_station_name(station_code)
 
     # station_code = (str(await ainput("Select station:> "))).upper().strip()
     # station_name = fetch_station_name(station_code)
