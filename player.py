@@ -254,7 +254,6 @@ station_map = {std_c: replace_abbvs(sta["name"]) for std_c, sta in station_map.i
 ann_station_map = {
     std_c: replace_abbvs(sta, station_abbvs) for std_c, sta in station_map.items()
 }
-print(ann_station_map)
 
 coach_pos_abbv = {
     "PWR": "P W R",

@@ -53,6 +53,7 @@ texts = {
         "deep_regret": "We deeply regret the inconvinence caused.",
         "pls_contact_authorities": "Please contact the authorities.",
         "no_information": "has no information available at this time.",
+        "coach_position": "Coach position from Engine",
     },
     "ta": {
         "attention": "பயணிகளின் கனிவான கவனத்திற்கு!",

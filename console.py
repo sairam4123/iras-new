@@ -2,14 +2,17 @@ import asyncio
 import datetime
 import heapq
 import json
+import sys
 
 import climage
-from aioconsole import aprint, ainput
-import simpleaudio as sa
+from aioconsole import ainput, aprint
 from pydub import AudioSegment
 from pydub.playback import _play_with_simpleaudio as play
 from tqdm import tqdm
-from player import main as player_main, coach_pos_main, TYPES
+
+from autocomplete import autocomplete
+from player import TYPES, coach_pos_main
+from player import main as player_main
 
 station_name = "Tambaram"
 station_code = "TBM"
@@ -67,7 +70,8 @@ COOLDOWN_BURST_MAP = {
 
 def fetch_station_name(station_code: str) -> str:
     station_code = station_code.upper()
-    stations = json.load(open(STATIONS_FILE))
+    with open(STATIONS_FILE, "r") as f:
+        stations = json.load(f)
     return stations.get(station_code, {"name": None})["name"]
 
 
@@ -230,42 +234,6 @@ async def play_announcements():
                     f"Skipping announcement {ann_file} as it is on burst cooldown. Last played {(current_time - last_played_burst_time).total_seconds()} seconds ago. Train No: {train_no} | Last Announcement Type: {last_ann_type}"
                 )
                 continue
-            # if (
-            #     last_ann_type is not None
-            #     and last_played_time is not None
-            #     and (last_ann_type in [5] or ann_type in [5])
-            #     and (times_played >= max_play_times)
-            # ):
-            #     if (
-            #         current_time - last_played_time
-            #     ).total_seconds() < 60:  # 5 minutes = 300 seconds
-            #         print(
-            #             f"Skipping announcement {ann_file} as it was played recently (critical announcement - {(current_time - last_played_time).total_seconds()} seconds < 60)"
-            #         )
-            #         continue
-            # if last_ann_type in [2, 3, 5] or ann_type in [2, 3, 5]:
-            #     if (
-            #         last_ann_type is not None
-            #         and last_played_time is not None
-            #         and (current_time - last_played_time).total_seconds() < 150
-            #         and (times_played >= max_play_times)
-            #     ):  # 2.5 minutes = 150 seconds
-            #         print(
-            #             f"Skipping announcement {ann_file} as it was played recently (critical announcement - {(current_time - last_played_time).total_seconds()} seconds < 150)"
-            #         )
-            #         continue
-
-            # if (
-            #     last_played_time
-            #     and (current_time - last_played_time).total_seconds() < 240
-            #     and (times_played >= max_play_times)
-            # ):  # 4 minutes = 4*60 seconds
-            #     if last_ann_type == ann_type:
-            #         print(
-            #             f"Skipping announcement {ann_file} as it was played recently - {(current_time - last_played_time).total_seconds()} seconds < 240"
-            #         )
-            #         continue
-            #     # but if the announcement type is (arriving on, on platform, departure ready), do not ignore those announcements but set it to every 2-3 mins instead of 5 mins, as those are more critical announcements.
 
             ann_seg: AudioSegment = AudioSegment.from_file(ann_file)
             print(
@@ -282,7 +250,9 @@ async def play_announcements():
                     await asyncio.sleep(0.5)
                     i += 0.5
                     tqdm_bar.update(0.5)
-                    tqdm_bar.set_postfix_str(f"Playing {ann_file} - {i:.2f}/{len(ann_seg) / 1000:.2f} seconds")
+                    tqdm_bar.set_postfix_str(
+                        f"Playing {ann_file} - {i:.2f}/{len(ann_seg) / 1000:.2f} seconds"
+                    )
                     # if i % 2 == 0:  # Print every 1 second (0.5 * 2)
                     #     print(
                     #         f"Announcement {ann_file} is playing {i}/{len(ann_seg) / 1000:.2f}..."
@@ -314,9 +284,24 @@ async def play_announcements():
 
 async def main():
     global station_name, station_code
-    station_code = (str(await ainput("Select station:> "))).upper().strip()
-    station_name = fetch_station_name(station_code)
-    if station_name is None:
+
+    autocomplete_prompt = "Select station:> "
+    options = set()
+    stations = {}
+    with open(STATIONS_FILE, "r") as f:
+        stations = json.load(f)
+        options = {station["name"] for station in stations.values()}.union(
+            {code for code in stations}
+        )
+
+    station_name_code = {station["name"]: code for code, station in stations.items()}
+    autocomplete_station_name = autocomplete(autocomplete_prompt, options)
+    station_name = autocomplete_station_name
+    station_code = station_name_code.get(station_name, station_name)
+
+    # station_code = (str(await ainput("Select station:> "))).upper().strip()
+    # station_name = fetch_station_name(station_code)
+    if station_name is None or station_code is None:
         await aprint("Station not found")
         return
     await aprint("Station selected: " + station_name)
@@ -331,4 +316,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Exiting...")
-        exit(0)
+        sys.exit(0)
