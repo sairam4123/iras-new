@@ -5,6 +5,7 @@ This project is the successor to the [Indian\_Railways\_Announcement\_System](ht
 ## Features
 
 - **Console App**: A standalone application that plays railway-style, multi-language train announcements through local speakers.
+- **Station Autocomplete**: Pick the station to announce for at startup by typing its name or code, with fuzzy-matched inline suggestions.
 
 
 ## History
@@ -32,6 +33,12 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
    uv run console.py
    ```
 
+3. **Select a Station**:
+
+   - At the `Select station:>` prompt, start typing a station name (e.g. `TAMBARAM`) or code (e.g. `TBM`). The best fuzzy match is shown as a faint inline hint.
+   - **Up/Down** cycles through suggestions, **Tab/Right** accepts the current suggestion and keeps editing, **Enter** selects it, and **Esc** cancels.
+   - Stations are loaded from `stations.json`.
+
 ---
 
 ## Architecture
@@ -40,6 +47,8 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
 - **`player.py`**: Shared core logic — fetches live train arrivals/departures via `etrainlib`, classifies them into announcement `TYPES` (arrival, arrival shortly, on platform, departure, etc.), builds announcement text from `templates.py`, and hands it off to `vox.py` for audio generation.
 - **`vox.py`**: Builds and caches announcement audio. Synthesizes and caches individual phrases per language via `speaker.py`, assembles full announcements from `templates.py`, and prefixes them with a station chime.
 - **`templates.py`**: Per-language (English, Tamil, Hindi) phrase templates used to compose each announcement type.
+- **`autocomplete.py`**: Cross-platform (macOS/Linux/Windows) terminal autocomplete prompt used for station selection. Reads keys directly from the terminal and ranks matches with `fuzzywuzzy`.
+- **`stations.json`**: Station code → name lookup used for station selection and name resolution.
 - **`speaker.py`**: Wraps the Google Cloud Text-to-Speech API to synthesize announcement phrases.
 - **`dataset_parser.py`**: One-off utility that extracts NSG station-classification tables from RDSO PDFs (`dataset/station/`) into JSON.
 
@@ -80,7 +89,7 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
 
 4. **Audio Generation**:
 
-   - Google Cloud Text-to-Speech converts announcement phrases into audio in three languages (English, Tamil, Hindi); synthesized phrases are cached on disk and reused across announcements.
+   - Google Cloud Text-to-Speech converts announcement phrases into audio in three languages (English, Tamil, Hindi); leading and trailing silence is trimmed from each synthesized phrase before it is cached on disk and reused across announcements.
    - A signature chime ("ting ting") is added to the beginning of all announcements.
 
 5. **Audio Playback**:

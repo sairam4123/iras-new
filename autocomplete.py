@@ -1,8 +1,14 @@
-import keyboard
+from contextlib import contextmanager
 from fuzzywuzzy import process
 import logging
+import sys
 
-# from t import print
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import select
+    import termios
+    import tty
 
 
 class Font:
@@ -20,76 +26,100 @@ class Font:
 
 logging.getLogger("root").setLevel(level=logging.ERROR)
 
+# Escape sequences sent by the terminal (after "\x1b[") / by Windows (after "\xe0")
+ansi_keys = {"A": "up", "B": "down", "C": "right", "D": "left"}
+win_keys = {"H": "up", "P": "down", "M": "right", "K": "left"}
+
 key_mean = {
-    "space": " ",
-    "backspace": "\b \b",
-    "enter": "\n",
-    "up": "\033[1A",
-    "down": "\033[1B",
-    "left": "\033[1C",
-    "right": "\033[1D",
+    "\r": "enter",
+    "\n": "enter",
+    "\t": "tab",
+    "\x7f": "backspace",
+    "\x08": "backspace",
+    "\x1b": "esc",
 }
 
-# print("Enter prodID: ", end="", flush=True)
 
-# prod_id = ""
+@contextmanager
+def terminal_keys():
+    """Read keys from this terminal one at a time, without echo."""
+    if sys.platform == "win32":
+        yield
+        return
+    fd = sys.stdin.fileno()
+    old_attrs = termios.tcgetattr(fd)
+    try:
+        # cbreak keeps Ctrl+C working, unlike raw mode
+        tty.setcbreak(fd)
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
+
+
+def read_key() -> str:
+    if sys.platform == "win32":
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            return win_keys.get(msvcrt.getwch(), "")
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        return key_mean.get(ch, ch)
+
+    ch = sys.stdin.read(1)
+    if ch == "\x1b":
+        # a lone Esc has nothing following it; arrow keys send "\x1b[A" etc.
+        if not select.select([sys.stdin], [], [], 0.05)[0]:
+            return "esc"
+        seq = sys.stdin.read(2)
+        return ansi_keys.get(seq[1:], "") if seq.startswith("[") else ""
+    return key_mean.get(ch, ch)
+
+
+def render(prompt: str, selected_choice: str, suggestion: str) -> None:
+    if suggestion.upper().startswith(selected_choice):
+        hint = suggestion[len(selected_choice) :]
+    else:
+        hint = f"  ({suggestion})"
+    print(
+        f"\r\033[K{prompt}{selected_choice}{Font.faint_font}{hint}{Font.reset_font}",
+        end="",
+    )
+    if hint:
+        print(f"\033[{len(hint)}D", end="")
+    print(end="", flush=True)
 
 
 def autocomplete(prompt: str, options: set[str]) -> str:
-    print(prompt, end="", flush=True)
     choice_idx = 0
-    reset = False
     selected_choice = ""
-    while True:
-        if keyboard.is_pressed("esc"):
-            break
-        if not selected_choice and not reset:
+    choices = process.extract(selected_choice, choices=options)
+    render(prompt, selected_choice, choices[choice_idx][0])
+    with terminal_keys():
+        while True:
+            key = read_key()
+            if key == "esc":
+                break
+            if key == "enter":
+                selected_choice = choices[choice_idx][0]
+                render(prompt, selected_choice, selected_choice)
+                break
+            if key in ["up", "down"]:
+                step = 1 if key == "down" else -1
+                choice_idx = (choice_idx + step) % len(choices)
+                render(prompt, selected_choice, choices[choice_idx][0])
+                continue
+            if key in ["tab", "right"]:
+                selected_choice = choices[choice_idx][0]
+            elif key == "backspace":
+                selected_choice = selected_choice[:-1]
+            elif len(key) == 1 and key.isprintable():
+                selected_choice += key.upper()
+            else:
+                continue
             choice_idx = 0
-            reset = True
-        choices = process.extract(selected_choice, choices=options)
-        key = keyboard.read_event(True)
-        # print(key)
-        if key.event_type == "up":
-            continue
-        if keyboard.is_modifier(key.name):
-            continue
-        key_str = key_mean.get(key.name, key.name)
-        if key_str == "esc":
-            break
-        if key_str == "\n":
-            print(f"\033[{len(selected_choice)}D", end="")
-            print(choices[choice_idx][0], end="")
-            print(key_str, end="")
-            selected_choice = choices[choice_idx][0]
-            break
-        if key.name in ["up", "down", "right", "left"]:
-            if key.name == "down":
-                choice_idx = (choice_idx + 1) % len(choices)
-                print(f"\033[{len(selected_choice)}D", end="")
-                print(
-                    " " + Font.faint_font + choices[choice_idx][0], end="", flush=True
-                )
-                print(f"\033[{len(choices[choice_idx][0])}D", end="")
-                print(Font.reset_font + selected_choice, end="", flush=True)
-            continue
-        if key.name in ["tab", "right"]:
-            print(f"\033[{len(selected_choice)}D", end="")
-            selected_choice = choices[choice_idx][0]
-            # print(" " + Font.faint_font + choices[choice_idx][0], end="", flush=True)
-            # print(f"\033[{len(choices[choice_idx][0])}D", end="")
-            print(Font.reset_font + selected_choice, end="", flush=True)
-            continue
-        if key.name != "backspace":
-            selected_choice += key_str.upper()
-            print(f"\033[{len(selected_choice)}D", end="")
-        else:
-            reset = False
-            print(f"\033[{len(selected_choice) + 1}D", end="")
-            selected_choice = selected_choice[:-1]
-
-        print(" " + Font.faint_font + choices[choice_idx][0], end="", flush=True)
-        print(f"\033[{len(choices[choice_idx][0])}D", end="")
-        print(Font.reset_font + selected_choice, end="", flush=True)
+            choices = process.extract(selected_choice, choices=options)
+            render(prompt, selected_choice, choices[choice_idx][0])
+    print()
     return selected_choice
 
 

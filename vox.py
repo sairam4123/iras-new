@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import io
 import time
 from typing import Any
 from pydub.silence import detect_leading_silence
@@ -267,24 +268,25 @@ def build_cache_all():
 
 
 def generate_audio_for_hint(ann_hint: str, key: str, lang: str) -> pydub.AudioSegment:
-    with open(CACHE_FPS[lang] / f"{key}.mp3", "w+b") as f:
+    with io.BytesIO() as f:
         t2s(ann_hint, f, lang=lang_map.get(lang, "en-IN"))
         f.seek(0)
-        segment = pydub.AudioSegment.from_file(f, format="mp3")
-        dead_silence_duration = detect_leading_silence(segment)
-        if dead_silence_duration > 0:
-            print(
-                f"Trimming {dead_silence_duration}ms of leading silence from cached audio for key: {key} in cache: {lang}"
-            )
-            segment = segment[dead_silence_duration:]
-        death_silence_duration = detect_leading_silence(segment.reverse())
-        if death_silence_duration > 0:
-            print(
-                f"Trimming {death_silence_duration}ms of trailing silence from cached audio for key: {key} in cache: {lang}"
-            )
-            segment = segment[:-death_silence_duration]
-        segment.export(CACHE_FPS[lang] / f"{key}.mp3", format="mp3")
-        return segment
+        segment: pydub.AudioSegment = pydub.AudioSegment.from_file(f, format="mp3")
+
+    dead_silence_duration = detect_leading_silence(segment)
+    if dead_silence_duration > 0:
+        print(
+            f"Trimming {dead_silence_duration}ms of leading silence from cached audio for key: {key} in cache: {lang}"
+        )
+        segment: pydub.AudioSegment = segment[dead_silence_duration:] # type: ignore
+    death_silence_duration = detect_leading_silence(segment.reverse())
+    if death_silence_duration > 0:
+        print(
+            f"Trimming {death_silence_duration}ms of trailing silence from cached audio for key: {key} in cache: {lang}"
+        )
+        segment = segment[:-death_silence_duration] # type: ignore
+    segment.export(CACHE_FPS[lang] / f"{key}.mp3", format="mp3")
+    return segment
 
 
 def stitch_announcement(ann_hints: list[str], lang: str) -> pydub.AudioSegment | None:
