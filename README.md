@@ -1,11 +1,17 @@
 # IRAS-New
 
-This project is the successor to the [Indian\_Railways\_Announcement\_System](https://github.com/sairam4123/Indian_Railways_Announcement_System) built 5 years ago. It builds upon a personal project developed a few years earlier and has been significantly enhanced.
+IRAS-New is an automated train announcement system modelled on the announcements heard at Indian Railways stations. It monitors live arrivals and departures at a selected station and plays announcements in Tamil, Hindi, and English through local speakers, following the conventions described in RDSO (Research Design and Standards Organization) documentation.
+
+It is the successor to the [Indian\_Railways\_Announcement\_System](https://github.com/sairam4123/Indian_Railways_Announcement_System), built 5 years ago, which itself grew out of an earlier personal project.
 
 ## Features
 
-- **Console App**: A standalone application that plays railway-style, multi-language train announcements through local speakers.
-- **Station Autocomplete**: Pick the station to announce for at startup by typing its name or code, with fuzzy-matched inline suggestions.
+- **Live station monitoring**: tracks real-time arrivals and departures at any Indian Railways station.
+- **Multilingual announcements**: every announcement is delivered in Tamil, Hindi, and English, each following its own natural word order.
+- **Context-aware messages**: announces expected arrivals, imminent arrivals, trains on platform, and departures, based on each train's timings and whether it originates, terminates, or passes through the station.
+- **Authentic announcement content**: train numbers are read digit by digit, significant via stations are chosen using the RDSO station classification, and coach positions are announced in advance.
+- **Priority scheduling**: urgent announcements take precedence, with per-type repeat limits and cooldowns to avoid redundant repetition.
+- **Phrase-level audio caching**: announcements are assembled from individually cached phrases, minimising text-to-speech requests.
 
 
 ## History
@@ -33,34 +39,42 @@ This project originated as a Discord Bot designed to replicate Indian Railways a
    uv run console.py
    ```
 
-3. **Select a Station**:
-
-   - At the `Select station:>` prompt, start typing a station name (e.g. `TAMBARAM`) or code (e.g. `TBM`). The best fuzzy match is shown as a faint inline hint.
-   - **Up/Down** cycles through suggestions, **Tab/Right** accepts the current suggestion and keeps editing, **Enter** selects it, and **Esc** cancels.
-   - Stations are loaded from `stations.json`.
+3. **Select a Station**: at the `Select station:>` prompt, type a station name (e.g. `TAMBARAM`) or code (e.g. `TBM`) and press **Enter**.
 
 ---
 
 ## Architecture
 
-- **`console.py`**: Standalone entry point; polls live train data on a loop and plays announcements through local speakers, applying per-announcement-type priority, repeat, cooldown, and burst-cooldown rules.
-- **`player.py`**: Shared core logic — fetches live train arrivals/departures via `etrainlib`, classifies them into announcement `TYPES` (arrival, arrival shortly, on platform, departure, etc.), builds announcement text from `templates.py`, and hands it off to `vox.py` for audio generation.
-- **`vox.py`**: Builds and caches announcement audio. Synthesizes and caches individual phrases per language via `speaker.py`, assembles full announcements from `templates.py`, and prefixes them with a station chime.
-- **`templates.py`**: Per-language (English, Tamil, Hindi) phrase templates used to compose each announcement type.
-- **`autocomplete.py`**: Fuzzy-matching terminal prompt used for station selection (works on macOS, Linux, and Windows).
-- **`stations.json`**: Station code → name lookup used for station selection and name resolution.
-- **`speaker.py`**: Wraps the Google Cloud Text-to-Speech API to synthesize announcement phrases.
-- **`dataset_parser.py`**: One-off utility that extracts NSG station-classification tables from RDSO PDFs (`dataset/station/`) into JSON.
+The system is organised in three stages: train data is acquired from etrain.info, converted into multilingual announcement audio, and scheduled for playback.
 
-### Custom Libraries
+```mermaid
+flowchart TD
+    subgraph DATA["1 · Data acquisition"]
+        WEB[("etrain.info")] -->|HTTP| ET["etrainlib<br/>etrain.info client"]
+    end
 
-- **`etrainlib`**:
+    subgraph GEN["2 · Announcement generation"]
+        PL["player.py<br/>Classification, via stations,<br/>name normalisation"]
+        TPL["templates.py<br/>Per-language templates"] --> PL
+        STN[("stations.json<br/>Station names")] --> PL
+        NSG[("nsg_data.json<br/>RDSO station categories")] --> PL
+        PL -->|filled templates| VOX["vox.py<br/>Phrase caching and stitching"]
+        VOX <--> CACHE[("anns/cache<br/>Cached phrases")]
+        VOX -->|uncached phrases| SPK["speaker.py<br/>Google Cloud TTS"]
+    end
 
-   - Scrapes data from [etrain.info](https://etrain.info) using BeautifulSoup.
-   - Provides both sync (`_sync.py`) and async (`_async.py`) APIs for simplified data access.
+    subgraph PLAY["3 · Playback (console.py)"]
+        PROD["Producer<br/>Runs every 70 s"] --> HEAP[["Priority queue"]]
+        HEAP --> CONS["Consumer<br/>Repeats and cooldowns"]
+    end
 
+    ET -->|live board, schedules,<br/>coach positions| PL
+    VOX -->|announcement audio| PROD
+    USER(["User"]) -->|selects station| PROD
+    CONS --> OUT(["Local / station speakers"])
+```
 
-## How It Works
+## Methodology
 
 This section describes the pipeline from live train data to a played announcement.
 
@@ -103,7 +117,7 @@ Announcements name only a few significant intermediate stations rather than ever
 2. Selects the top five.
 3. Re-orders the selection by distance, so stations are announced in travel order.
 
-Each retrieved schedule is also merged into `stations.json`, so the station list (and therefore the selection options) expands with use.
+Each retrieved schedule is also merged into `stations.json`, so the station list expands with use.
 
 ### Text Normalisation
 
@@ -142,6 +156,58 @@ Once the cache is populated, most announcements require no TTS requests. A previ
 For each train, the three language versions are generated in parallel (`asyncio.to_thread`) and sped up by a factor of 1.1 to match the pace of station announcements. They are concatenated in the order **Tamil → Hindi → English**, separated by 500 ms of silence, and prefixed with the signature station chime ("ting ting"). The result is exported to `anns/trains/<train_no>_<train_name>.mp3`; each language version is also saved to `anns/final/`.
 
 Speech is synthesized with a Google Cloud **WaveNet** female voice for each language (`en-IN`, `hi-IN`, `ta-IN`), selected in `speaker.py`.
+
+### Example: Generating an Announcement
+
+Consider train 12635 Vaigai Express (Chennai Egmore → Madurai), due at Tambaram on platform 7 in under two minutes. As the train passes through the station, it is classified as **Arriving on platform** and the `arrival_on_middle` template is used.
+
+**1. Template filling.** `fill_train_details` resolves each token of the English template into one or more audio segments, each backed by a file in `anns/cache/en/`:
+
+| Template token | Segment | Cache file |
+| --- | --- | --- |
+| `{cache[attention]}` | "Your kind attention please!" | `attention.mp3` |
+| `{cache[train_number]}` | "Train number" | `train_number.mp3` |
+| `{train[no]}` | "one", "two", "six", "three", "five" | `one.mp3`, `two.mp3`, `six.mp3`, … |
+| `{train[name]}` | "vaigai express" | `085f4d429c.mp3` |
+| `{cache[bound_for]}` | "bound for" | `bound_for.mp3` |
+| `{train[dest]}` | "madurai" | `367c34213d.mp3` |
+| `{cache[coming_from]}` | "coming from" | `coming_from.mp3` |
+| `{train[src]}` | "chennai egmore" | `450c2ba700.mp3` |
+| `{cache[arriving_on]}` | "is arriving on" | `arriving_on.mp3` |
+| `{cache[platform_label]}` | "platform number" | `platform_label.mp3` |
+| `{train[pf]}` | "7" | `f05210c5b4.mp3` |
+
+Fixed phrases and digits are cached by key. Dynamic segments are cached by the SHA-512 hash of their text.
+
+**2. Cache lookup and synthesis.** Each segment is looked up in memory, then on disk. Only segments absent from both are sent to Google Cloud TTS, trimmed, and written to the cache. With the fixed phrases already cached, at most four segments in this announcement require synthesis: the train name, the two station names, and the platform number. Subsequent announcements for this train are assembled entirely from the cache.
+
+**3. Stitching.** The segments are joined with 50 ms gaps and sped up by a factor of 1.1, producing:
+
+> Your kind attention please! Train number one two six three five, vaigai express, bound for madurai, coming from chennai egmore, is arriving on platform number 7.
+
+**4. Other languages.** The Tamil and Hindi versions are produced in parallel in the same way, from their own templates and caches (`anns/cache/ta/`, `anns/cache/hi/`). Their templates are verb-final, so the platform and the verb come last:
+
+```
+attention → train_number → digits → name → src → coming_from → dest → bound_for → train → platform → pf → arriving_on
+```
+
+Tamil:
+
+> பயணிகளின் கனிவான கவனத்திற்கு! வண்டி எண் ஒன்று இரண்டு ஆறு மூன்று ஐந்து, vaigai express, chennai egmore இலிருந்து madurai வரை செல்லும் இரயில் பிளாட்பாரம் நம்பர் 7-இல் வந்து கொண்டிருக்கிறது.
+
+Hindi:
+
+> यात्रिगण कृपया ध्यान दें! गाड़ी संख्या एक दो छह तीन पांच, vaigai express, chennai egmore से आने वाली madurai तक जाने वाली गाड़ी प्लेटफॉर्म नंबर 7 पर आ रही है।
+
+Both translate to: *"Passengers' kind attention! Train number one two six three five, Vaigai Express, the train from Chennai Egmore bound for Madurai, is arriving on platform number 7."* Train and station names are passed to each language's voice as written, so all three versions use the same names.
+
+**5. Final assembly.** The language versions are combined behind the chime:
+
+```
+[chime] [500 ms] [Tamil] [500 ms] [Hindi] [500 ms] [English] [500 ms]
+```
+
+The result is exported to `anns/trains/12635_VAIGAI_EXP.mp3` and queued at priority 1 (see [Scheduling](#scheduling)).
 
 ### Scheduling
 
